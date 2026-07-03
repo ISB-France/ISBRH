@@ -129,6 +129,10 @@ class UserViewSet(viewsets.ModelViewSet):
             else:
                 qs = qs.filter(id=user.id)
 
+        show_all_statuts = self.request.query_params.get("show_all_statuts")
+        if not show_all_statuts:
+            qs = qs.exclude(statut__in=("inactif", "sortie"))
+
         site = self.request.query_params.get("site")
         manager = self.request.query_params.get("manager")
         search = self.request.query_params.get("search")
@@ -142,7 +146,6 @@ class UserViewSet(viewsets.ModelViewSet):
                 | db_models.Q(last_name__icontains=search)
                 | db_models.Q(email__icontains=search)
             )
-            qs = qs.filter(manager_id=manager)
 
         return qs
 
