@@ -74,6 +74,7 @@ export default function UserForm() {
     const q = managerSearch.toLowerCase();
     return (
       u.id !== Number(id) &&
+      u.statut === "actif" &&
       (`${u.first_name} ${u.last_name}`.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q))
     );
@@ -297,6 +298,57 @@ export default function UserForm() {
           </CardContent>
         </Card>
 
+        {/* Statut */}
+        {isEdit && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Statut</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Compte actif</p>
+                  <p className="text-xs text-muted-foreground">
+                    {statut === "actif"
+                      ? "L'utilisateur est actif et apparaît dans les sélections"
+                      : statut === "inactif"
+                        ? "L'utilisateur est inactif et n'apparaît plus dans les sélections (N+1, campagnes...)"
+                        : "L'utilisateur est sorti de l'entreprise"}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={statut === "actif" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setStatut("actif")}
+                  >
+                    Actif
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={statut === "inactif" ? "default" : "outline"}
+                    size="sm"
+                    className={statut === "inactif" ? "bg-orange-500 hover:bg-orange-600" : ""}
+                    onClick={() => setStatut("inactif")}
+                  >
+                    Inactif
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={statut === "sortie" ? "default" : "outline"}
+                    size="sm"
+                    className={statut === "sortie" ? "bg-red-500 hover:bg-red-600" : ""}
+                    onClick={() => setStatut("sortie")}
+                  >
+                    Sorti
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Contrat */}
         <Card>
           <CardHeader>
@@ -326,16 +378,9 @@ export default function UserForm() {
                 { value: "stage", label: "Stage" },
               ]} placeholder="" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <SelectField label="Statut" value={statut} onChange={setStatut} options={[
-                { value: "actif", label: "Actif" },
-                { value: "inactif", label: "Inactif" },
-                { value: "sortie", label: "Sortie" },
-              ]} />
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">Coefficient</label>
-                <Input value={coefficient} onChange={(e) => setCoefficient(e.target.value)} />
-              </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Coefficient</label>
+              <Input value={coefficient} onChange={(e) => setCoefficient(e.target.value)} />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">Salaire brut mensuel</label>

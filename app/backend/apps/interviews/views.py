@@ -150,7 +150,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def employees(self, request):
         if request.user.role in RH_ROLES:
-            users = User.objects.filter(is_active=True).values("id", "first_name", "last_name", "email")
+            users = User.objects.filter(is_active=True).exclude(statut__in=("inactif", "sortie")).values("id", "first_name", "last_name", "email")
             return Response(list(users))
         return Response([])
 
@@ -283,7 +283,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             return Response({"error": "La campagne n'a pas de modèle"}, status=status.HTTP_400_BAD_REQUEST)
 
         template = campaign.template
-        qs = User.objects.filter(is_active=True).exclude(role__in=("admin", "rh"))
+        qs = User.objects.filter(is_active=True).exclude(role__in=("admin", "rh")).exclude(statut__in=("inactif", "sortie"))
 
         pf = campaign.population_filter or {}
         site = pf.get("site")

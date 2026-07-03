@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, Upload } from "lucide-react";
+import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -28,6 +28,7 @@ export default function Users() {
   const [managerId, setManagerId] = useState<string>("");
   const [siteId, setSiteId] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
   const [importing, setImporting] = useState(false);
   const { toast, show, setToast } = useToast();
 
@@ -37,7 +38,7 @@ export default function Users() {
   });
 
   const { data: users, isLoading, error, refetch } = useQuery<User[]>({
-    queryKey: ["users", managerId, siteId, search],
+    queryKey: ["users", managerId, siteId, search, showInactive],
     queryFn: () =>
       api
         .get("/users/", {
@@ -45,6 +46,7 @@ export default function Users() {
             manager: managerId || undefined,
             site: siteId || undefined,
             search: search || undefined,
+            show_all_statuts: showInactive || undefined,
           },
         })
         .then((r) => r.data),
@@ -132,6 +134,17 @@ export default function Users() {
             </option>
           ))}
         </select>
+        {(currentUser?.role === "rh" || currentUser?.role === "admin") && (
+          <Button
+            variant={showInactive ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setShowInactive(!showInactive)}
+          >
+            {showInactive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showInactive ? "Masquer inactifs" : "Afficher inactifs"}
+          </Button>
+        )}
       </div>
 
       {managerId && (
@@ -189,7 +202,7 @@ export default function Users() {
                 return (
                   <tr
                     key={u.id}
-                    className={`border-b border-border last:border-0 ${hasSubordinates ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                    className={`border-b border-border last:border-0 ${hasSubordinates ? "cursor-pointer hover:bg-muted/50" : ""} ${u.statut !== "actif" ? "opacity-50" : ""}`}
                     onClick={() => hasSubordinates && setManagerId(String(u.id))}
                   >
                     <td className="px-6 py-3">
@@ -208,9 +221,17 @@ export default function Users() {
                       </div>
                     </td>
                     <td className="px-6 py-3">
-                      <Badge variant={u.role === "rh" || u.role === "admin" ? "default" : u.role === "manager" ? "secondary" : "outline"}>
-                        {roleLabel[u.role]}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant={u.role === "rh" || u.role === "admin" ? "default" : u.role === "manager" ? "secondary" : "outline"}>
+                          {roleLabel[u.role]}
+                        </Badge>
+                        {u.statut === "inactif" && (
+                          <Badge variant="outline" className="border-orange-300 text-orange-600">Inactif</Badge>
+                        )}
+                        {u.statut === "sortie" && (
+                          <Badge variant="outline" className="border-red-300 text-red-600">Sorti</Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-3 text-sm">{u.site_name || "-"}</td>
                     <td className="px-6 py-3 text-sm">{u.service_name || "-"}</td>

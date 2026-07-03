@@ -212,7 +212,7 @@ export default function CampaignForm() {
                 )}
               </label>
               <div className="max-h-48 overflow-y-auto rounded-md border border-border">
-                {allUsers?.map((u) => (
+                {allUsers?.filter((u) => u.statut === "actif").map((u) => (
                   <label key={u.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50">
                     <input
                       type="checkbox"
