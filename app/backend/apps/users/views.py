@@ -545,6 +545,103 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"status": "ok"})
 
 
+class SSOLoginView(APIView):
+    """
+    Valide un token SSO émis par ISBibliotheque.
+    POST /api/auth/sso/  { "token": "<uuid>" }
+    Appelle ISBibliotheque POST /api/sso/consume, récupère l'utilisateur,
+    crée/met à jour le compte local, retourne les tokens JWT.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        import requests as http_requests
+        from django.contrib.auth import get_user_model
+
+        UserModel = get_user_model()
+
+        token = request.data.get("token", "").strip()
+        if not token:
+            return Response({"error": "Token manquant"}, status=status.HTTP_400_BAD_REQUEST)
+
+        biblio_url = getattr(settings, "ISBIBLIOTHEQUE_URL", "").rstrip("/")
+        if not biblio_url:
+            return Response({"error": "ISBIBLIOTHEQUE_URL non configurée"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            resp = http_requests.post(
+                f"{biblio_url}/api/sso/consume",
+                json={"token": token},
+                timeout=10,
+            )
+        except http_requests.exceptions.RequestException as e:
+            return Response({"error": f"Impossible de joindre ISBibliotheque : {e}"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("SSO consume response: status=%s body=%s", resp.status_code, resp.text[:500])
+
+        if resp.status_code in (401, 404, 410):
+            return Response({"error": "Token SSO invalide ou expiré"}, status=status.HTTP_401_UNAUTHORIZED)
+        if not resp.ok:
+            return Response({"error": f"Erreur ISBibliotheque (HTTP {resp.status_code}): {resp.text[:200]}"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        data = resp.json()
+        user_data = data.get("user") or data
+        email = (user_data.get("email") or "").strip().lower()
+        name = user_data.get("name") or ""
+        roles = user_data.get("roles") or []
+        is_admin = user_data.get("isAdmin") or False
+
+        if not email:
+            return Response({"error": "Email manquant dans la réponse SSO"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        # Déduire le rôle interne
+        role_map = {"rh": "rh", "admin": "admin", "manager": "manager"}
+        internal_role = "employee"
+        if is_admin:
+            internal_role = "admin"
+        else:
+            for r in roles:
+                if r in role_map:
+                    internal_role = role_map[r]
+                    break
+
+        # Prénom / nom
+        parts = name.split(" ", 1)
+        first_name = parts[0] if parts else ""
+        last_name = parts[1] if len(parts) > 1 else ""
+
+        user, created = UserModel.objects.get_or_create(
+            email=email,
+            defaults={
+                "username": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "role": internal_role,
+                "is_active": True,
+            },
+        )
+        if not created:
+            # Mettre à jour les infos si l'utilisateur existe déjà
+            updated = False
+            if first_name and user.first_name != first_name:
+                user.first_name = first_name
+                updated = True
+            if last_name and user.last_name != last_name:
+                user.last_name = last_name
+                updated = True
+            if updated:
+                user.save(update_fields=["first_name", "last_name"])
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserMeSerializer(user).data,
+        })
+
+
 class DevLoginView(APIView):
     permission_classes = [permissions.AllowAny]
 
