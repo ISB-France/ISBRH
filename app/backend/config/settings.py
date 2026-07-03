@@ -79,6 +79,7 @@ OIDC_OP_TOKEN_ENDPOINT = os.environ.get("OIDC_OP_TOKEN_ENDPOINT")
 OIDC_OP_USER_ENDPOINT = os.environ.get("OIDC_OP_USER_ENDPOINT")
 OIDC_OP_JWKS_ENDPOINT = os.environ.get("OIDC_OP_JWKS_ENDPOINT")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5175")
+ISBIBLIOTHEQUE_URL = os.environ.get("ISBIBLIOTHEQUE_URL", "")
 OIDC_REDIRECT_URI = os.environ.get("OIDC_REDIRECT_URI")
 OIDC_RP_SCOPES = "openid email profile"
 OIDC_RP_SIGN_ALGO = "RS256"
