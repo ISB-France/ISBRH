@@ -31,6 +31,7 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importType, setImportType] = useState<"users" | "formations" | "augmentations">("users");
   const { toast, show, setToast } = useToast();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -87,11 +88,24 @@ export default function Users() {
     setImporting(true);
     const form = new FormData();
     form.append("file", file);
+
+    const endpoints: Record<string, string> = {
+      users: "/users/import_kostango/",
+      formations: "/users/import_formations/",
+      augmentations: "/users/import_augmentations/",
+    };
+
+    const labels: Record<string, string> = {
+      users: "utilisateurs",
+      formations: "formations",
+      augmentations: "augmentations",
+    };
+
     try {
-      const resp = await api.post("/users/import_kostango/", form);
-      const msg = `${resp.data.created} utilisateurs importés${resp.data.errors?.length ? " — " + resp.data.errors.slice(0, 3).join(", ") + (resp.data.errors.length > 3 ? "..." : "") : ""}`;
+      const resp = await api.post(endpoints[importType], form);
+      const msg = `${resp.data.created} ${labels[importType]} importé(s)${resp.data.errors?.length ? " — " + resp.data.errors.slice(0, 3).join(", ") + (resp.data.errors.length > 3 ? "..." : "") : ""}`;
       show(msg, resp.data.errors?.length ? "error" : "success");
-      refetch();
+      if (importType === "users") refetch();
     } catch (err) {
       console.error(err);
     }
@@ -108,6 +122,15 @@ export default function Users() {
         <h1 className="font-display text-2xl font-bold">Utilisateurs</h1>
         {(currentUser?.role === "rh" || currentUser?.role === "admin") && (
           <div className="flex gap-2">
+            <select
+              value={importType}
+              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations")}
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            >
+              <option value="users">Import utilisateurs</option>
+              <option value="formations">Import formations</option>
+              <option value="augmentations">Import augmentations</option>
+            </select>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
               <Upload className="h-4 w-4" />
               {importing ? "Import..." : "Importer"}
