@@ -35,6 +35,10 @@ class InterviewSerializer(serializers.ModelSerializer):
     employee_manager_id = serializers.SerializerMethodField()
     document_url = serializers.SerializerMethodField()
     previous_content = serializers.SerializerMethodField()
+    career = serializers.SerializerMethodField()
+    history = serializers.SerializerMethodField()
+    training_history = serializers.SerializerMethodField()
+    salary_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Interview
@@ -46,6 +50,10 @@ class InterviewSerializer(serializers.ModelSerializer):
             "type", "status", "due_date", "content",
             "document_url",
             "previous_content",
+            "career",
+            "history",
+            "training_history",
+            "salary_history",
             "created_at", "updated_at",
         ]
         read_only_fields = ["manager", "created_at", "updated_at"]
@@ -75,3 +83,105 @@ class InterviewSerializer(serializers.ModelSerializer):
         if prev:
             return prev.content.get("sections", [])
         return []
+
+    def get_history(self, obj):
+        from datetime import timedelta
+        from django.utils import timezone
+        six_years_ago = timezone.now() - timedelta(days=365.25 * 6)
+        past_interviews = (
+            Interview.objects.filter(
+                employee=obj.employee,
+                status__in=("completed", "signed"),
+                created_at__gte=six_years_ago,
+            )
+            .exclude(pk=obj.pk)
+            .select_related("manager")
+            .order_by("-created_at")[:6]
+        )
+        return [
+            {
+                "date": iv.created_at,
+                "type": iv.type,
+                "type_label": iv.get_type_display(),
+                "status": iv.status,
+                "status_label": iv.get_status_display(),
+                "manager_name": iv.manager.get_full_name() or iv.manager.email,
+            }
+            for iv in past_interviews
+        ]
+
+    def get_career(self, obj):
+        if obj.type == "professional":
+            career_interviews = Interview.objects.filter(
+                employee=obj.employee, type="professional",
+                status__in=("completed", "signed"),
+            ).exclude(pk=obj.pk).order_by("created_at")
+        elif obj.type == "bilan":
+            career_interviews = Interview.objects.filter(
+                employee=obj.employee, status__in=("completed", "signed"),
+            ).exclude(pk=obj.pk).order_by("created_at")
+        else:
+            return []
+        return [
+            {
+                "date": iv.created_at,
+                "type": iv.type,
+                "type_label": iv.get_type_display(),
+                "position": iv.content.get("employee_snapshot", {}).get("position"),
+                "service": iv.content.get("employee_snapshot", {}).get("service"),
+                "site": iv.content.get("employee_snapshot", {}).get("site"),
+                "coefficient": iv.content.get("employee_snapshot", {}).get("coefficient"),
+            }
+            for iv in career_interviews
+        ]
+
+    def get_training_history(self, obj):
+        if obj.type != "bilan":
+            return []
+        from datetime import timedelta
+        from django.utils import timezone
+        six_years_ago = timezone.now() - timedelta(days=365.25 * 6)
+        past = Interview.objects.filter(
+            employee=obj.employee, status__in=("completed", "signed"),
+            created_at__gte=six_years_ago,
+        ).exclude(pk=obj.pk).order_by("created_at")
+        result = []
+        for iv in past:
+            entries = []
+            for section in iv.content.get("sections", []):
+                for q in section.get("questions", []):
+                    qid = q.get("id", "")
+                    if any(kw in qid for kw in ["formation", "cpf", "vae", "certif"]):
+                        if q.get("answer"):
+                            entries.append({
+                                "label": q.get("label", qid),
+                                "answer": q.get("answer", ""),
+                            })
+            if entries:
+                result.append({
+                    "date": iv.created_at,
+                    "type": iv.get_type_display(),
+                    "entries": entries,
+                })
+        return result
+
+    def get_salary_history(self, obj):
+        if obj.type != "bilan":
+            return []
+        from datetime import timedelta
+        from django.utils import timezone
+        six_years_ago = timezone.now() - timedelta(days=365.25 * 6)
+        past = Interview.objects.filter(
+            employee=obj.employee, status__in=("completed", "signed"),
+            created_at__gte=six_years_ago,
+        ).exclude(pk=obj.pk).order_by("created_at")
+        return [
+            {
+                "date": iv.created_at,
+                "type": iv.get_type_display(),
+                "salary": iv.content.get("employee_snapshot", {}).get("salaire_brut"),
+                "coefficient": iv.content.get("employee_snapshot", {}).get("coefficient"),
+            }
+            for iv in past
+            if iv.content.get("employee_snapshot", {}).get("salaire_brut")
+        ]

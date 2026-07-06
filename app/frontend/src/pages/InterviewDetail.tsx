@@ -11,6 +11,7 @@ import LoadingScreen from "../components/LoadingScreen";
 import { Toast, useToast } from "../components/Toast";
 import api from "../api";
 import type { Interview, User, Section } from "../types";
+import { formatDate } from "../lib/utils";
 
 const statusLabel: Record<string, string> = {
   draft: "Brouillon",
@@ -42,7 +43,7 @@ export default function InterviewDetail() {
     });
   }, [id]);
 
-  const updateAnswer = (sIdx: number, qIdx: number, value: string | number | null) => {
+  const updateAnswer = (sIdx: number, qIdx: number, value: string | number | boolean | null) => {
     setSections((prev) => {
       const next = [...prev];
       const qs = [...next[sIdx].questions];
@@ -133,7 +134,7 @@ export default function InterviewDetail() {
   const canEdit = currentUser?.role === "admin" || currentUser?.role === "rh" || interview.manager === currentUser?.id || (isOwn && hasNoManager) || (currentUser?.role === "manager" && !isOwn);
   const isReadOnly = !canEdit || interview.status === "completed" || interview.status === "signed" || interview.status === "cancelled";
 
-  const prevAnswers = new Map<string, string | number | (string | number | null)[][] | null>();
+  const prevAnswers = new Map<string, string | number | boolean | (string | number | null)[][] | null>();
   for (const section of interview.previous_content || []) {
     for (const q of section.questions) {
       if (q.answer !== undefined) prevAnswers.set(q.id, q.answer);
@@ -160,7 +161,7 @@ export default function InterviewDetail() {
               <>{" · "}<span className="text-muted-foreground">{interview.template_name}</span></>
             )}
             {" · "}
-            Date limite : {interview.due_date}
+            Date limite : {formatDate(interview.due_date)}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -206,7 +207,7 @@ export default function InterviewDetail() {
           <div className="mb-4 grid grid-cols-2 gap-3 border-b border-border pb-4">
             <div>
               <span className="text-xs font-semibold uppercase text-muted-foreground">Date d'entretien</span>
-              <p className="text-sm font-medium">{new Date().toLocaleDateString("fr-FR")}</p>
+              <p className="text-sm font-medium">{formatDate(new Date())}</p>
             </div>
             <div>
               <span className="text-xs font-semibold uppercase text-muted-foreground">Nature de l'entretien</span>
@@ -240,8 +241,8 @@ export default function InterviewDetail() {
                   <tr><td className="py-1 text-muted-foreground">Sexe</td><td className="py-1 pl-4">
                     {({ homme: "Homme", femme: "Femme", non_binaire: "Non-Binaire" } as Record<string, string>)[interview.employee_detail?.sexe ?? ""] || "-"}
                   </td></tr>
-                  <tr><td className="py-1 text-muted-foreground">Date naissance</td><td className="py-1 pl-4">{interview.employee_detail?.date_naissance || "-"}</td></tr>
-                  <tr><td className="py-1 text-muted-foreground">Date embauche</td><td className="py-1 pl-4">{interview.employee_detail?.hire_date || "-"}</td></tr>
+<tr><td className="py-1 text-muted-foreground">Date naissance</td><td className="py-1 pl-4">{interview.employee_detail?.date_naissance ? formatDate(interview.employee_detail.date_naissance) : "-"}</td></tr>
+                    <tr><td className="py-1 text-muted-foreground">Date embauche</td><td className="py-1 pl-4">{interview.employee_detail?.hire_date ? formatDate(interview.employee_detail.hire_date) : "-"}</td></tr>
                   <tr><td className="py-1 text-muted-foreground">Type contrat</td><td className="py-1 pl-4">
                     {({ cdi: "CDI", cdd: "CDD", interim: "Intérim", alternance: "Alternance", stage: "Stage" } as Record<string, string>)[interview.employee_detail?.type_contrat ?? ""] || "-"}
                   </td></tr>
@@ -258,6 +259,147 @@ export default function InterviewDetail() {
           </div>
         </CardContent>
       </Card>
+
+      {(interview.type === "professional" || interview.type === "bilan") && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>Historique d'évolution professionnel</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {interview.career && interview.career.length > 0 ? (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Date</th>
+                      {interview.type === "bilan" && <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Type</th>}
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Poste</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Service</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Site</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Coefficient</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {interview.career.map((step, i) => (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        <td className="px-4 py-2">{formatDate(step.date)}</td>
+                        {interview.type === "bilan" && <td className="px-4 py-2">{step.type_label}</td>}
+                        <td className="px-4 py-2">{step.position || "—"}</td>
+                        <td className="px-4 py-2">{step.service || "—"}</td>
+                        <td className="px-4 py-2">{step.site || "—"}</td>
+                        <td className="px-4 py-2">{step.coefficient || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucun historique d'évolution professionnel.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {(interview.type === "annual" || interview.type === "bilan") && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>Historique des entretiens</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {interview.history && interview.history.length > 0 ? (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Type</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Statut</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Manager</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {interview.history.map((h, i) => (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        <td className="px-4 py-2">{formatDate(h.date)}</td>
+                        <td className="px-4 py-2">{h.type_label}</td>
+                        <td className="px-4 py-2">{h.status_label}</td>
+                        <td className="px-4 py-2">{h.manager_name}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucun entretien précédent.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {interview.type === "bilan" && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>Historique des formations</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {interview.training_history && interview.training_history.length > 0 ? (
+              interview.training_history.map((entry, i) => (
+                <div key={i}>
+                  <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                    {formatDate(entry.date)} — {entry.type}
+                  </p>
+                  <div className="space-y-2">
+                    {entry.entries.map((e, j) => (
+                      <div key={j}>
+                        <p className="text-xs text-muted-foreground">{e.label}</p>
+                        <p className="text-sm whitespace-pre-wrap rounded-md border border-border bg-muted/30 px-3 py-2">{e.answer}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucune formation suivie.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {interview.type === "bilan" && (
+        <Card className="mb-4">
+          <CardHeader>
+            <CardTitle>Historique de progression salariale</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {interview.salary_history && interview.salary_history.length > 0 ? (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Type d'entretien</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Salaire brut</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-muted-foreground">Coefficient</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {interview.salary_history.map((e, i) => (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        <td className="px-4 py-2">{formatDate(e.date)}</td>
+                        <td className="px-4 py-2">{e.type}</td>
+                        <td className="px-4 py-2">{e.salary ? `${e.salary} €` : "—"}</td>
+                        <td className="px-4 py-2">{e.coefficient || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Aucune donnée salariale.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {sections.map((section, sIdx) => (
         <Card key={section.id} className="mb-4">
@@ -306,6 +448,33 @@ export default function InterviewDetail() {
                   {prev !== undefined && prev !== null && (
                     <p className="mt-1 text-xs text-muted-foreground/60 italic">
                       Note précédente : {String(prev)}/5
+                    </p>
+                  )}
+                  </>
+                )}
+                {q.type === "yesno" && (
+                  <>
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant={q.answer === true ? "default" : "outline"}
+                      onClick={() => !isReadOnly && updateAnswer(sIdx, qIdx, true)}
+                      disabled={isReadOnly}
+                    >
+                      Oui
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={q.answer === false ? "default" : "outline"}
+                      onClick={() => !isReadOnly && updateAnswer(sIdx, qIdx, false)}
+                      disabled={isReadOnly}
+                    >
+                      Non
+                    </Button>
+                  </div>
+                  {prev !== undefined && prev !== null && (
+                    <p className="mt-1 text-xs text-muted-foreground/60 italic">
+                      Réponse précédente : {prev === true ? "Oui" : "Non"}
                     </p>
                   )}
                   </>

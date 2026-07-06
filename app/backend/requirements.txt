@@ -8,3 +8,4 @@ python-dotenv>=1.1,<2
 Pillow>=11,<12
 weasyprint>=64,<65
 gunicorn>=23,<24
+openpyxl>=3.1,<4

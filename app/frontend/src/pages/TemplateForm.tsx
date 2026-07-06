@@ -142,7 +142,7 @@ export default function TemplateForm() {
           ...q,
           label: q.label.trim(),
           type: q.type,
-          answer: q.type === "table" ? [] : "",
+          answer: q.type === "table" ? [] : q.type === "yesno" ? null : "",
           columns: q.type === "table" ? (q.columns || []).filter((c) => c.label.trim()).map((c) => ({ ...c, label: c.label.trim() })) : undefined,
         })),
       }));
@@ -262,6 +262,7 @@ export default function TemplateForm() {
                       >
                         <option value="textarea">Texte long</option>
                         <option value="rating">Note (1-5)</option>
+                        <option value="yesno">Oui / Non</option>
                         <option value="table">Tableau</option>
                       </select>
                     </div>

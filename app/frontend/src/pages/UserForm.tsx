@@ -5,8 +5,10 @@ import { ArrowLeft, Check, Plus, X, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { DateInput } from "../components/ui/date-input";
 import AppLayout from "../components/AppLayout";
 import api from "../api";
+import { formatDate } from "../lib/utils";
 import type { Site, Service, Position, User } from "../types";
 
 export default function UserForm() {
@@ -94,12 +96,12 @@ export default function UserForm() {
       setFirstName(d.first_name);
       setLastName(d.last_name);
       setSexe(d.sexe ?? "");
-      setDateNaissance(d.date_naissance ?? "");
+      setDateNaissance(formatDate(d.date_naissance));
       setTelephone(d.telephone ?? "");
 
       setMatricule(d.matricule ?? "");
-      setHireDate(d.hire_date ?? "");
-      setDateSortie(d.date_sortie ?? "");
+      setHireDate(formatDate(d.hire_date));
+      setDateSortie(formatDate(d.date_sortie));
       setTypeContrat(d.type_contrat ?? "");
       setStatut(d.statut ?? "actif");
       setCoefficient(d.coefficient ?? "");
@@ -138,6 +140,11 @@ export default function UserForm() {
     queryClient.invalidateQueries({ queryKey: ["positions"] });
   };
 
+  const toApiDate = (val: string) => {
+    const parts = val.split("/");
+    return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : val;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
@@ -145,11 +152,11 @@ export default function UserForm() {
       first_name: firstName,
       last_name: lastName,
       sexe: sexe || "",
-      date_naissance: dateNaissance || null,
+      date_naissance: toApiDate(dateNaissance) || null,
       telephone,
       matricule,
-      hire_date: hireDate || null,
-      date_sortie: dateSortie || null,
+      hire_date: toApiDate(hireDate) || null,
+      date_sortie: toApiDate(dateSortie) || null,
       type_contrat: typeContrat || "",
       statut,
       coefficient,
@@ -288,7 +295,7 @@ export default function UserForm() {
               ]} placeholder="" />
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date de naissance</label>
-                <Input type="date" value={dateNaissance} onChange={(e) => setDateNaissance(e.target.value)} />
+                <DateInput value={dateNaissance} onChange={setDateNaissance} />
               </div>
             </div>
             <div>
@@ -362,13 +369,13 @@ export default function UserForm() {
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date d'embauche</label>
-                <Input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} />
+                <DateInput value={hireDate} onChange={setHireDate} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date de sortie</label>
-                <Input type="date" value={dateSortie} onChange={(e) => setDateSortie(e.target.value)} />
+                <DateInput value={dateSortie} onChange={setDateSortie} />
               </div>
               <SelectField label="Type de contrat" value={typeContrat} onChange={setTypeContrat} options={[
                 { value: "cdi", label: "CDI" },

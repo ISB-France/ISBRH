@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutDashboard, Users, FileText, LogOut, Menu, X, FileEdit, Flag, Bell } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { cn } from "../lib/utils";
+import { cn, formatDate } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Separator } from "./ui/separator";
@@ -170,7 +170,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         {n.message}
                       </div>
                       <div className="mt-0.5 text-[10px] text-muted-foreground">
-                        {new Date(n.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        {formatDate(n.created_at)} à {new Date(n.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                       </div>
                     </button>
                   ))}
