@@ -91,8 +91,8 @@ export interface TableColumn {
 export interface Question {
   id: string;
   label: string;
-  type: "textarea" | "rating" | "table";
-  answer?: string | number | null | (string | number | null)[][];
+  type: "textarea" | "rating" | "table" | "yesno";
+  answer?: string | number | boolean | null | (string | number | null)[][];
   columns?: TableColumn[];
 }
 
@@ -112,9 +112,45 @@ export interface Interview {
   due_date: string;
   content: Record<string, unknown>;
   previous_content: Section[];
+  career: CareerStep[];
+  history: HistoryStep[];
+  training_history: TrainingEntry[];
+  salary_history: SalaryEntry[];
   document_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CareerStep {
+  date: string;
+  type: string;
+  type_label: string;
+  position: string | null;
+  service: string | null;
+  site: string | null;
+  coefficient: string | null;
+}
+
+export interface HistoryStep {
+  date: string;
+  type: string;
+  type_label: string;
+  status: string;
+  status_label: string;
+  manager_name: string;
+}
+
+export interface TrainingEntry {
+  date: string;
+  type: string;
+  entries: { label: string; answer: string }[];
+}
+
+export interface SalaryEntry {
+  date: string;
+  type: string;
+  salary: string | null;
+  coefficient: string | null;
 }
 
 export interface Notification {

@@ -129,6 +129,30 @@ class User(AbstractUser):
 RH_ROLES = ["admin", "rh"]
 
 
+class Formation(models.Model):
+    employee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="formations")
+    matricule = models.CharField(max_length=50, blank=True)
+    domaine = models.CharField(max_length=255, blank=True)
+    libelle = models.CharField(max_length=255, blank=True)
+    date_formation = models.DateField(null=True, blank=True)
+    nature = models.CharField(max_length=50, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_formation"]
+
+
+class Augmentation(models.Model):
+    employee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="augmentations")
+    matricule = models.CharField(max_length=50, blank=True)
+    date_effet = models.DateField(null=True, blank=True)
+    montant = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_effet"]
+
+
 class Notification(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
     message = models.CharField(max_length=255)

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
@@ -27,17 +27,26 @@ export default function Users() {
   const navigate = useNavigate();
   const [managerId, setManagerId] = useState<string>("");
   const [siteId, setSiteId] = useState<string>("");
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importType, setImportType] = useState<"users" | "formations" | "augmentations">("users");
   const { toast, show, setToast } = useToast();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearch(searchInput), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchInput]);
 
   const { data: currentUser } = useQuery<User>({
     queryKey: ["me"],
     queryFn: () => api.get("/auth/me/").then((r) => r.data),
   });
 
-  const { data: users, isLoading, error, refetch } = useQuery<User[]>({
+  const { data: users, isFetching, isLoading, error, refetch } = useQuery<User[]>({
     queryKey: ["users", managerId, siteId, search, showInactive],
     queryFn: () =>
       api
@@ -50,6 +59,7 @@ export default function Users() {
           },
         })
         .then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
 
   const { data: allUsers } = useQuery<User[]>({
@@ -78,11 +88,24 @@ export default function Users() {
     setImporting(true);
     const form = new FormData();
     form.append("file", file);
+
+    const endpoints: Record<string, string> = {
+      users: "/users/import_kostango/",
+      formations: "/users/import_formations/",
+      augmentations: "/users/import_augmentations/",
+    };
+
+    const labels: Record<string, string> = {
+      users: "utilisateurs",
+      formations: "formations",
+      augmentations: "augmentations",
+    };
+
     try {
-      const resp = await api.post("/users/import_kostango/", form);
-      const msg = `${resp.data.created} utilisateurs importés${resp.data.errors?.length ? " — " + resp.data.errors.slice(0, 3).join(", ") + (resp.data.errors.length > 3 ? "..." : "") : ""}`;
+      const resp = await api.post(endpoints[importType], form);
+      const msg = `${resp.data.created} ${labels[importType]} importé(s)${resp.data.errors?.length ? " — " + resp.data.errors.slice(0, 3).join(", ") + (resp.data.errors.length > 3 ? "..." : "") : ""}`;
       show(msg, resp.data.errors?.length ? "error" : "success");
-      refetch();
+      if (importType === "users") refetch();
     } catch (err) {
       console.error(err);
     }
@@ -90,7 +113,7 @@ export default function Users() {
     e.target.value = "";
   };
 
-  if (isLoading) return <LoadingScreen />;
+  if (isLoading && !users) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les utilisateurs" onRetry={refetch} />;
 
   return (
@@ -99,6 +122,15 @@ export default function Users() {
         <h1 className="font-display text-2xl font-bold">Utilisateurs</h1>
         {(currentUser?.role === "rh" || currentUser?.role === "admin") && (
           <div className="flex gap-2">
+            <select
+              value={importType}
+              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations")}
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            >
+              <option value="users">Import utilisateurs</option>
+              <option value="formations">Import formations</option>
+              <option value="augmentations">Import augmentations</option>
+            </select>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
               <Upload className="h-4 w-4" />
               {importing ? "Import..." : "Importer"}
@@ -117,8 +149,8 @@ export default function Users() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Rechercher par nom, prénom, email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
@@ -171,7 +203,12 @@ export default function Users() {
       )}
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 relative">
+          {isFetching && (
+            <div className="absolute right-4 top-4 z-10">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          )}
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase text-muted-foreground">

@@ -11,6 +11,7 @@ import ErrorScreen from "../components/ErrorScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
 import api from "../api";
 import type { Interview, User } from "../types";
+import { formatDate } from "../lib/utils";
 
 const downloadPdf = async (id: number) => {
   const res = await api.get(`/interviews/${id}/pdf/`, { responseType: "blob" });
@@ -46,6 +47,8 @@ export default function Interviews() {
   const [scope, setScope] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const uploadTargetRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,17 +120,23 @@ export default function Interviews() {
         <div className="inline-flex rounded-md border border-border">
           <button
             className={`px-4 py-2 text-sm font-medium transition-colors ${!showHistory ? "bg-primary-foreground text-primary" : "bg-white text-muted-foreground hover:bg-muted/50"}`}
-            onClick={() => setShowHistory(false)}
+            onClick={() => { setShowHistory(false); setSelectedIds([]); }}
           >
             En cours
           </button>
           <button
             className={`px-4 py-2 text-sm font-medium transition-colors ${showHistory ? "bg-primary-foreground text-primary" : "bg-white text-muted-foreground hover:bg-muted/50"}`}
-            onClick={() => setShowHistory(true)}
+            onClick={() => { setShowHistory(true); setSelectedIds([]); }}
           >
             Historique
           </button>
         </div>
+        {selectedIds.length > 0 && (
+          <Button variant="destructive" size="sm" onClick={() => setShowBulkDeleteConfirm(true)}>
+            <Trash2 className="mr-1 h-4 w-4" />
+            Supprimer ({selectedIds.length})
+          </Button>
+        )}
         <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleDocumentUpload} />
       </div>
 
@@ -136,6 +145,19 @@ export default function Interviews() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase text-muted-foreground">
+                <th className="px-4 pb-3 pt-4 w-10">
+                  {(currentUser?.role === "admin" || currentUser?.role === "rh") && (
+                    <input
+                      type="checkbox"
+                      checked={interviews !== undefined && interviews.length > 0 && selectedIds.length === interviews.length}
+                      onChange={() => {
+                        if (!interviews) return;
+                        setSelectedIds(selectedIds.length === interviews.length ? [] : interviews.map((iv) => iv.id));
+                      }}
+                      className="h-4 w-4"
+                    />
+                  )}
+                </th>
                 <th className="px-6 pb-3 pt-4">Employé</th>
                 <th className="px-6 pb-3 pt-4">Type</th>
                 <th className="px-6 pb-3 pt-4">Modèle</th>
@@ -148,7 +170,7 @@ export default function Interviews() {
             <tbody>
               {interviews?.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="px-6 py-8 text-center text-sm text-muted-foreground">
                     {showHistory ? "Aucun entretien terminé" : "Aucun entretien en cours"}
                   </td>
                 </tr>
@@ -158,6 +180,20 @@ export default function Interviews() {
                   key={iv.id}
                   className="border-b border-border last:border-0 transition-colors"
                 >
+                  <td className="px-4 py-3">
+                    {(currentUser?.role === "admin" || currentUser?.role === "rh") && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(iv.id)}
+                        onChange={() =>
+                          setSelectedIds((prev) =>
+                            prev.includes(iv.id) ? prev.filter((x) => x !== iv.id) : [...prev, iv.id],
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+                    )}
+                  </td>
                   <td className="px-6 py-3 text-sm font-medium">
                     {iv.employee_detail?.first_name} {iv.employee_detail?.last_name}
                   </td>
@@ -172,7 +208,7 @@ export default function Interviews() {
                       {statusLabel[iv.status]}
                     </Badge>
                   </td>
-                  <td className="px-6 py-3 text-sm">{iv.due_date}</td>
+                  <td className="px-6 py-3 text-sm">{formatDate(iv.due_date)}</td>
                   <td className="px-6 py-3">
                     <div className="text-sm text-muted-foreground">
                       {iv.manager_detail?.first_name} {iv.manager_detail?.last_name}
@@ -242,6 +278,21 @@ export default function Interviews() {
           </table>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={showBulkDeleteConfirm}
+        title="Supprimer la sélection"
+        message={`Êtes-vous sûr de vouloir supprimer ${selectedIds.length} entretien${selectedIds.length > 1 ? "s" : ""} ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        onConfirm={async () => {
+          setShowBulkDeleteConfirm(false);
+          await api.post("/interviews/bulk_delete/", { ids: selectedIds });
+          setSelectedIds([]);
+          queryClient.invalidateQueries({ queryKey: ["interviews"] });
+        }}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
 
       <ConfirmDialog
         open={deleteId !== null}

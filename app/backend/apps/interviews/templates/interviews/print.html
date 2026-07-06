@@ -196,6 +196,8 @@
       <div class="q-label">{{ question.label }}</div>
       {% if question.type == "textarea" %}
       <div class="q-answer">{{ question.answer|default:"—" }}</div>
+      {% elif question.type == "yesno" %}
+      <div class="q-answer">{% if question.answer == True %}Oui{% elif question.answer == False %}Non{% else %}—{% endif %}</div>
       {% elif question.type == "rating" %}
       <div class="rating">
         {% for i in "12345"|make_list %}
