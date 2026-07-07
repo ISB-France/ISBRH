@@ -55,6 +55,11 @@ class UserSerializer(serializers.ModelSerializer):
             return obj.manager.get_full_name() or obj.manager.email
         return None
 
+    def validate_role(self, value):
+        if value == "admin":
+            raise serializers.ValidationError("Le rôle admin ne peut pas être attribué via ce formulaire")
+        return value
+
     def create(self, validated_data):
         validated_data["username"] = validated_data["email"]
         return super().create(validated_data)

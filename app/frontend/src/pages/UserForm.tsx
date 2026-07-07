@@ -417,7 +417,6 @@ export default function UserForm() {
           </CardHeader>
           <CardContent className="space-y-4">
             <SelectField label="Rôle applicatif" value={role} onChange={setRole} options={[
-              { value: "admin", label: "Admin" },
               { value: "rh", label: "RH" },
               { value: "manager", label: "Manager" },
               { value: "employee", label: "Employé" },
