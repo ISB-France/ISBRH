@@ -1,7 +1,23 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager as BaseUserManager
 from django.db import models
 
 from .validators import validate_phone
+
+
+class UserManager(BaseUserManager):
+    def create_user(self, username=None, email=None, **extra_fields):
+        if not email:
+            raise ValueError("L'adresse email est obligatoire")
+        email = self.normalize_email(email)
+        username = username or email
+        return super().create_user(username=username, email=email, **extra_fields)
+
+    def create_superuser(self, username=None, email=None, **extra_fields):
+        if not email:
+            raise ValueError("L'adresse email est obligatoire")
+        email = self.normalize_email(email)
+        username = username or email
+        return super().create_superuser(username=username, email=email, **extra_fields)
 
 
 class Site(models.Model):
@@ -110,6 +126,8 @@ class User(AbstractUser):
         ],
         default="pending",
     )
+
+    objects = UserManager()
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
