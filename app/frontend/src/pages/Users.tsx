@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -31,9 +31,20 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importType, setImportType] = useState<"users" | "formations" | "augmentations">("users");
+  const [importType, setImportType] = useState<"users" | "formations" | "augmentations" | "collaborateurs">("users");
   const { toast, show, setToast } = useToast();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -61,6 +72,19 @@ export default function Users() {
         .then((r) => r.data),
     placeholderData: keepPreviousData,
   });
+
+  const displayed = useMemo(() => {
+    if (!users || !sortField) return users;
+    return [...users].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "user") {
+        const aName = `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim();
+        const bName = `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim();
+        cmp = aName.localeCompare(bName);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [users, sortField, sortDir]);
 
   const { data: allUsers } = useQuery<User[]>({
     queryKey: ["users-all"],
@@ -93,19 +117,21 @@ export default function Users() {
       users: "/users/import_kostango/",
       formations: "/users/import_formations/",
       augmentations: "/users/import_augmentations/",
+      collaborateurs: "/users/import_collaborateurs/",
     };
 
     const labels: Record<string, string> = {
       users: "utilisateurs",
       formations: "formations",
       augmentations: "augmentations",
+      collaborateurs: "collaborateurs",
     };
 
     try {
       const resp = await api.post(endpoints[importType], form);
       const msg = `${resp.data.created} ${labels[importType]} importé(s)${resp.data.errors?.length ? " — " + resp.data.errors.slice(0, 3).join(", ") + (resp.data.errors.length > 3 ? "..." : "") : ""}`;
       show(msg, resp.data.errors?.length ? "error" : "success");
-      if (importType === "users") refetch();
+      if (importType === "users" || importType === "collaborateurs") refetch();
     } catch (err) {
       console.error(err);
     }
@@ -124,10 +150,11 @@ export default function Users() {
           <div className="flex gap-2">
             <select
               value={importType}
-              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations")}
+              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations" | "collaborateurs")}
               className="h-10 rounded-md border border-border bg-white px-3 text-sm"
             >
               <option value="users">Import utilisateurs</option>
+              <option value="collaborateurs">Import évolution professionnelle</option>
               <option value="formations">Import formations</option>
               <option value="augmentations">Import augmentations</option>
             </select>
@@ -212,7 +239,16 @@ export default function Users() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase text-muted-foreground">
-                <th className="px-6 pb-3 pt-4">Utilisateur</th>
+                <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("user")}>
+                  <div className="flex items-center gap-1">
+                    Utilisateur
+                    {sortField === "user" ? (
+                      sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 pb-3 pt-4">Rôle</th>
                 <th className="px-6 pb-3 pt-4">Site</th>
                 <th className="px-6 pb-3 pt-4">Service</th>
@@ -230,7 +266,7 @@ export default function Users() {
                   </td>
                 </tr>
               )}
-              {users?.map((u) => {
+              {displayed?.map((u) => {
                 const subordinates = allUsers ? getAllDescendants(u.id, allUsers) : [];
                 const hasSubordinates = subordinates.length > 0;
                 const maxAvatars = 3;

@@ -352,6 +352,94 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response({"created": created, "errors": errors})
 
     @action(detail=False, methods=["post"])
+    def import_collaborateurs(self, request):
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+
+        decoded = file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(decoded))
+
+        created = 0
+        updated = 0
+        errors = []
+
+        for row_num, row in enumerate(reader, start=2):
+            matricule = row.get("Matricule", "").strip()
+            if not matricule:
+                errors.append(f"Ligne {row_num}: Matricule manquant")
+                continue
+
+            try:
+                first_name = row.get("Prénom", "").strip().capitalize()
+                last_name = row.get("Nom", "").strip().upper()
+                date_naissance = self._parse_date(row.get("Date de naissance", "").strip())
+                date_entree = self._parse_date(row.get("Date d'entrée", "").strip())
+
+                statut = row.get("Statut", "").strip().lower()
+                if statut not in ("actif", "inactif", "sortie"):
+                    statut = "actif"
+
+                niveau = row.get("Niveau", "").strip()
+                coefficient = row.get("Coefficient", "").strip()
+
+                position_name = row.get("Poste", "").strip()
+                position = None
+                if position_name:
+                    position, _ = Position.objects.get_or_create(name=position_name)
+
+                fonctionnement = row.get("Fonctionnement", "").strip()
+
+                user, created_flag = User.objects.get_or_create(
+                    matricule=matricule,
+                    defaults={
+                        "username": f"collab_{matricule}",
+                        "email": f"{matricule}@collaborateur.isb.fr",
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "role": "employee",
+                        "date_naissance": date_naissance,
+                        "hire_date": date_entree,
+                        "statut": statut,
+                        "niveau": niveau,
+                        "coefficient": coefficient,
+                        "position": position,
+                        "fonctionnement": fonctionnement,
+                    },
+                )
+                if created_flag:
+                    user.set_unusable_password()
+                    user.save()
+                    created += 1
+                else:
+                    changed = False
+                    for f, v in [
+                        ("first_name", first_name),
+                        ("last_name", last_name),
+                        ("date_naissance", date_naissance),
+                        ("hire_date", date_entree),
+                        ("statut", statut),
+                        ("niveau", niveau),
+                        ("coefficient", coefficient),
+                        ("position", position),
+                        ("fonctionnement", fonctionnement),
+                    ]:
+                        if getattr(user, f) != v:
+                            setattr(user, f, v)
+                            changed = True
+                    if changed:
+                        user.save()
+                        updated += 1
+
+            except Exception as e:
+                errors.append(f"Ligne {row_num} (matricule {matricule}): {e}")
+
+        return Response({"created": created, "updated": updated, "errors": errors})
+
+    @action(detail=False, methods=["post"])
     def import_kostango(self, request):
         if request.user.role not in RH_ROLES:
             return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
