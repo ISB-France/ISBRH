@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Download, Trash2, Upload, X } from "lucide-react";
+import { Plus, Download, Trash2, Upload, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -51,6 +51,17 @@ export default function Interviews() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const uploadTargetRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -77,6 +88,21 @@ export default function Interviews() {
         params: { type, status: statusParam, scope: scope || undefined, ordering: showHistory ? "-updated_at" : undefined },
       }).then((r) => r.data),
   });
+
+  const displayed = useMemo(() => {
+    if (!interviews || !sortField) return interviews;
+    return [...interviews].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "employee") {
+        const aName = `${a.employee_detail?.first_name ?? ""} ${a.employee_detail?.last_name ?? ""}`.trim();
+        const bName = `${b.employee_detail?.first_name ?? ""} ${b.employee_detail?.last_name ?? ""}`.trim();
+        cmp = aName.localeCompare(bName);
+      } else if (sortField === "due_date") {
+        cmp = a.due_date.localeCompare(b.due_date);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [interviews, sortField, sortDir]);
 
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les entretiens" onRetry={refetch} />;
@@ -158,11 +184,29 @@ export default function Interviews() {
                     />
                   )}
                 </th>
-                <th className="px-6 pb-3 pt-4">Employé</th>
+                <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("employee")}>
+                  <div className="flex items-center gap-1">
+                    Employé
+                    {sortField === "employee" ? (
+                      sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 pb-3 pt-4">Type</th>
                 <th className="px-6 pb-3 pt-4">Modèle</th>
                 <th className="px-6 pb-3 pt-4">Statut</th>
-                <th className="px-6 pb-3 pt-4">Date limite</th>
+                <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("due_date")}>
+                  <div className="flex items-center gap-1">
+                    Date limite
+                    {sortField === "due_date" ? (
+                      sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 pb-3 pt-4">Manager</th>
                 <th className="px-6 pb-3 pt-4"></th>
               </tr>
@@ -175,7 +219,7 @@ export default function Interviews() {
                   </td>
                 </tr>
               )}
-              {interviews?.map((iv) => (
+              {displayed?.map((iv) => (
                 <tr
                   key={iv.id}
                   className="border-b border-border last:border-0 transition-colors"

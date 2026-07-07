@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Trash2, Download } from "lucide-react";
+import { Plus, Trash2, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -28,6 +28,17 @@ export default function Campaigns() {
   const [typeFilter, setTypeFilter] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const { data: currentUser } = useQuery<User>({
     queryKey: ["me"],
@@ -52,6 +63,19 @@ export default function Campaigns() {
     if (typeFilter && templateTypeMap.get(c.template ?? -1) !== typeFilter) return false;
     return true;
   });
+
+  const displayed = useMemo(() => {
+    if (!filtered || !sortField) return filtered;
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "name") {
+        cmp = a.name.localeCompare(b.name);
+      } else if (sortField === "period") {
+        cmp = a.start_date.localeCompare(b.start_date);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortField, sortDir]);
 
   const handleExportXlsx = async () => {
     const ids = selectedIds.length > 0 ? selectedIds : filtered?.map((c) => c.id) || [];
@@ -134,9 +158,27 @@ export default function Campaigns() {
                     className="h-4 w-4"
                   />
                 </th>
-                <th className="px-6 pb-3 pt-4">Nom</th>
+                <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("name")}>
+                  <div className="flex items-center gap-1">
+                    Nom
+                    {sortField === "name" ? (
+                      sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 pb-3 pt-4">Type</th>
-                <th className="px-6 pb-3 pt-4">Période</th>
+                <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("period")}>
+                  <div className="flex items-center gap-1">
+                    Période
+                    {sortField === "period" ? (
+                      sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 pb-3 pt-4">Entretiens</th>
                 <th className="px-6 pb-3 pt-4"></th>
               </tr>
@@ -149,7 +191,7 @@ export default function Campaigns() {
                   </td>
                 </tr>
               )}
-              {filtered?.map((c) => {
+              {displayed?.map((c) => {
                 const tType = templateTypeMap.get(c.template ?? -1);
                 return (
                 <tr key={c.id} className="border-b border-border last:border-0">

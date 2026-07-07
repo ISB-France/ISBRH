@@ -78,6 +78,8 @@ class User(AbstractUser):
     type_contrat = models.CharField(max_length=20, choices=TypeContrat.choices, blank=True)
     statut = models.CharField(max_length=20, choices=StatutEmploye.choices, default=StatutEmploye.ACTIF)
     coefficient = models.CharField(max_length=20, blank=True)
+    niveau = models.CharField(max_length=50, blank=True)
+    fonctionnement = models.CharField(max_length=50, blank=True)
     salaire_brut = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     forfait_jour = models.BooleanField(default=False)
     tickets_restaurant = models.BooleanField(default=False)

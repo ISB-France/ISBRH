@@ -33,6 +33,8 @@ export interface User {
   type_contrat: "" | "cdi" | "cdd" | "interim" | "alternance" | "stage";
   statut: "actif" | "inactif" | "sortie";
   coefficient: string;
+  niveau: string;
+  fonctionnement: string;
   salaire_brut: number | null;
   forfait_jour: boolean;
   tickets_restaurant: boolean;
