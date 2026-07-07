@@ -1,11 +1,16 @@
 import logging
 
+from django.conf import settings
+
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend as BaseOIDCBackend
 
 logger = logging.getLogger(__name__)
 
 
 class OIDCAuthenticationBackend(BaseOIDCBackend):
+    def get_redirect_uri(self, request):
+        return getattr(settings, "OIDC_REDIRECT_URI", None) or super().get_redirect_uri(request)
+
     def create_user(self, claims):
         email = claims.get("email") or claims.get("preferred_username")
         logger.info("OIDC create_user - claims: %s", claims)
