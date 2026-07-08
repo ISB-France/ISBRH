@@ -157,3 +157,27 @@ Matricule,Date,Montant Augmentation
 - Les erreurs sont retournées ligne par ligne avec le détail
 - En cas d'échec partiel, les lignes valides sont tout de même importées
 - Le doublon sur `matricule` (collaborateurs) ou `email` (Kostango) déclenche une mise à jour, pas un rejet
+
+## Questions fréquentes
+
+### Si j'importe deux fois le même email avec des rôles différents, ça crée deux utilisateurs ?
+
+Non. L'import utilisateurs (Kostango) utilise l'**email** comme clé. Si vous importez `jean.dupont@isb.fr` avec le rôle `rh`, puis le même email avec le rôle `employee`, le second import **met à jour** l'utilisateur existant (son rôle deviendra `employee`). Il n'y a jamais de doublon sur un même email.
+
+### Et pour l'import collaborateurs (matricule) ?
+
+Même principe : la clé est le **matricule**. Deux imports avec le même matricule = mise à jour du même utilisateur, pas de doublon.
+
+### Puis-je définir le rôle "admin" via un import ou le formulaire ?
+
+Non. Le rôle `admin` a été retiré :
+- Du formulaire de création/modification d'utilisateur
+- Validé côté API : une tentative de passer `role: "admin"` sera rejetée
+
+Le rôle `admin` ne peut être attribué que :
+- Automatiquement à la première migration (via les variables d'environnement `ADMIN_EMAIL` / `ADMIN_PASSWORD`)
+- Via l'interface d'administration Django (`/admin/`)
+
+### L'import fonctionne-t-il avec des accents (é, è, ê, etc.) ?
+
+Oui. L'encodage `utf-8-sig` accepte les caractères accentués et le BOM (Byte Order Mark) des exports Excel.
