@@ -30,7 +30,7 @@
 
 #### User (utilisateur)
 - **Identité** : email, nom, prénom, sexe, date naissance, téléphone, photo, icon (émoji)
-- **Contrat** : matricule, date embauche/sortie, type contrat (CDI/CDD/intérim/alternance/stage), statut (actif/inactif/sortie), coefficient, salaire brut, forfait jour, tickets resto, cadre
+- **Contrat** : matricule, date embauche/sortie, type contrat (CDI/CDD/intérim/alternance/stage), statut (actif/inactif/sortie), coefficient, niveau, fonctionnement, salaire brut, forfait jour, tickets resto, cadre
 - **Organisation** : service (FK), poste (FK), site (FK), manager (FK vers User), agence intérim
 - **Auth** : rôle (admin/rh/manager/employee/stagiaire/alternant), onboarding_status
 - **Préférences** : champ JSON `preferences` (stocke le thème couleur, etc.)
@@ -75,7 +75,11 @@
 | `/api/token/refresh/` | POST | Rafraîchir JWT |
 | `/api/users/` | GET, POST | Liste/création utilisateurs |
 | `/api/users/{id}/` | GET, PUT, PATCH, DELETE | Détail/modification utilisateur |
-| `/api/users/import_csv/` | POST | Import CSV utilisateurs |
+| `/api/users/import_kostango/` | POST | Import utilisateurs (Kostango) |
+| `/api/users/import_collaborateurs/` | POST | Import collaborateurs |
+| `/api/users/import_formations/` | POST | Import formations |
+| `/api/users/import_augmentations/` | POST | Import augmentations |
+| `/api/users/next_matricule/` | GET | Prochain matricule disponible |
 | `/api/interviews/` | GET, POST | Liste/création entretiens |
 | `/api/interviews/{id}/` | GET, PUT, PATCH, DELETE | Détail/modification entretien |
 | `/api/interviews/{id}/print/` | GET | Version print d'un entretien |
@@ -170,18 +174,18 @@ Le premier utilisateur créé (via le login dev) reçoit automatiquement le rôl
 2. Les variables actuelles pointent sur un tenant Azure actif
 3. En dev, utiliser le login par email sur `/login` (pas besoin d'Entra ID)
 
-### Import CSV utilisateurs
+### Imports CSV
 
-Format attendu (headers) :
-```
-email,first_name,last_name,role,manager_email,site_name,service_name,position_name,matricule,type_contrat,statut,coefficient,salaire_brut,forfait_jour,tickets_restaurant,cadre,agence_interim,telephone,sexe,date_naissance,hire_date,date_sortie
-```
+Quatre imports sont disponibles depuis la page **Utilisateurs** (réservé aux rôles RH/Admin) :
 
-- `role` : admin / rh / manager / employee / stagiaire / alternant
-- `type_contrat` : cdi / cdd / interim / alternance / stage
-- `statut` : actif / inactif / sortie
-- `forfait_jour`, `tickets_restaurant`, `cadre` : 0 ou 1
-- `manager_email` : doit correspondre à un utilisateur existant (email insensible à la casse)
+| Import | Endpoint | Clé |
+|---|---|---|
+| Utilisateurs (Kostango) | `POST /api/users/import_kostango/` | email |
+| Collaborateurs | `POST /api/users/import_collaborateurs/` | matricule |
+| Formations | `POST /api/users/import_formations/` | matricule |
+| Augmentations | `POST /api/users/import_augmentations/` | matricule |
+
+Voir [doc/IMPORTS.md](IMPORTS.md) pour le détail des colonnes, exemples et FAQ.
 
 ### Entretiens
 
