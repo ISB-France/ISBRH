@@ -467,3 +467,60 @@ class HistoryRecordsProtectEmployeeDeletionTests(TestCase):
     def test_deleting_employee_without_history_still_works(self):
         self.employee.delete()
         self.assertFalse(User.objects.filter(pk=self.employee.pk).exists())
+
+
+class EvpFieldsExposureAndValidationTests(TestCase):
+    """Verifie l'exposition/protection de code_badge et is_manager_evp
+    ajoutes pour le flux badge EVP (UserForm cote frontend en depend)."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234",
+            role="manager", is_manager_evp=True, code_badge="BADGE001",
+        )
+        self.client = APIClient()
+
+    def test_me_endpoint_exposes_is_manager_evp_read_only(self):
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.get("/api/auth/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["is_manager_evp"])
+
+        # Tentative d'auto-attribution via /api/auth/me/ : ignoree silencieusement
+        # (champ read_only), pas d'erreur, mais pas de changement non plus.
+        other = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+        self.client.force_authenticate(user=other)
+        response = self.client.patch("/api/auth/me/", {"is_manager_evp": True}, format="json")
+        self.assertEqual(response.status_code, 200)
+        other.refresh_from_db()
+        self.assertFalse(other.is_manager_evp)
+
+    def test_rh_can_set_code_badge_and_is_manager_evp_via_users_api(self):
+        self.client.force_authenticate(user=self.rh_user)
+        employee = User.objects.create_user(
+            username="emp2", email="emp2@example.com", password="pass1234", role="employee"
+        )
+        response = self.client.patch(
+            f"/api/users/{employee.id}/", {"code_badge": "BADGE999", "is_manager_evp": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        employee.refresh_from_db()
+        self.assertEqual(employee.code_badge, "BADGE999")
+        self.assertTrue(employee.is_manager_evp)
+
+    def test_duplicate_code_badge_returns_field_level_error(self):
+        self.client.force_authenticate(user=self.rh_user)
+        employee = User.objects.create_user(
+            username="emp3", email="emp3@example.com", password="pass1234", role="employee"
+        )
+        response = self.client.patch(
+            f"/api/users/{employee.id}/", {"code_badge": "BADGE001"}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("code_badge", response.data)

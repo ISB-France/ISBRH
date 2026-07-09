@@ -121,7 +121,12 @@ class UserMeSerializer(serializers.ModelSerializer):
             "manager", "manager_name", "agence_interim",
             "icon",
             "preferences",
+            "is_manager_evp",
         ]
+        # is_manager_evp doit etre visible (le frontend en a besoin pour
+        # afficher/masquer l'entree de nav EVP) mais jamais modifiable via
+        # /api/auth/me/ — seul UserSerializer (RH/admin) peut l'ecrire.
+        read_only_fields = ["is_manager_evp"]
 
     def get_photo(self, obj):
         if obj.photo:
