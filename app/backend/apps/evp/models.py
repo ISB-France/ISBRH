@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import DatabaseError, models
 
 
 class MoisClotureError(ValidationError):
@@ -35,6 +35,36 @@ def check_month_not_closed(employee_id, *dates):
                 f"Le mois {date.month:02d}/{date.year} est déjà clôturé pour cet "
                 "employé : aucune modification n'est possible."
             )
+
+
+# Prefixe distinctif du message RAISE EXCEPTION leve par le trigger DB
+# evp_check_mois_non_cloture (voir migration 0004) — permet de reconnaitre
+# cette erreur precise parmi toutes les DatabaseError possibles, sans
+# dependre du texte complet (localisation, formatage) du message.
+DB_TRIGGER_MOIS_CLOTURE_MARKER = "EVP_MOIS_CLOTURE"
+
+
+def save_with_closed_month_guard(instance, super_save, *args, **kwargs):
+    """Execute super_save() (le save() de la classe parente) et retraduit
+    en MoisClotureError (ValidationError) toute erreur DB provenant du
+    trigger evp_check_mois_non_cloture, plutot que de laisser une
+    DatabaseError/psycopg brute remonter jusqu'a l'API/l'utilisateur. Le
+    trigger existe justement pour les cas que clean() ne peut pas voir
+    (bulk_create/bulk_update, ecriture SQL directe) ; les save() ORM
+    normaux sont deja bloques plus tot par clean(), donc ce filet ne
+    devrait se declencher qu'en cas de course (cloture appliquee entre le
+    clean() et l'ecriture) — mais on le traite proprement dans tous les cas.
+    """
+    try:
+        super_save(*args, **kwargs)
+    except DatabaseError as exc:
+        if DB_TRIGGER_MOIS_CLOTURE_MARKER in str(exc):
+            raise MoisClotureError(
+                "Le mois correspondant est déjà clôturé pour cet employé : "
+                "aucune modification n'est possible (bloqué au niveau base "
+                "de données)."
+            ) from exc
+        raise
 
 
 def sync_calcule_retenu(instance, field_prefix, nouvelle_valeur):
@@ -189,7 +219,7 @@ class JourTravaille(models.Model):
 
     def save(self, *args, **kwargs):
         self.clean()
-        super().save(*args, **kwargs)
+        save_with_closed_month_guard(self, super().save, *args, **kwargs)
 
     def _calculer_heures_theoriques(self):
         """Regle metier simplifiee (a affiner a l'etape API/calcul) :
@@ -286,7 +316,7 @@ class Absence(models.Model):
 
     def save(self, *args, **kwargs):
         self.clean()
-        super().save(*args, **kwargs)
+        save_with_closed_month_guard(self, super().save, *args, **kwargs)
 
 
 class PrimeCalculee(models.Model):
@@ -324,7 +354,7 @@ class PrimeCalculee(models.Model):
 
     def save(self, *args, **kwargs):
         self.clean()
-        super().save(*args, **kwargs)
+        save_with_closed_month_guard(self, super().save, *args, **kwargs)
 
     def recalculer(self, montant=None, quantite=None):
         """Applique une nouvelle valeur calculee (fournie par l'appelant :

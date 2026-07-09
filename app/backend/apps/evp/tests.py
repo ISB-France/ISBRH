@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.db import IntegrityError
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.test import TestCase
 
 from apps.evp.models import (
@@ -300,3 +300,105 @@ class CreditRttMensuelCommandTests(TestCase):
         call_command("credit_rtt_mensuel", "--mois=3", "--annee=2025")
         self.compteur.refresh_from_db()
         self.assertEqual(self.compteur.solde_rtt, Decimal("4.00"))
+
+
+class ClotureMensuelleDatabaseTriggerTests(TestCase):
+    """Le trigger PostgreSQL (migration 0004) doit bloquer une ecriture qui
+    contourne completement l'ORM (donc clean()/save()) — c'est precisement
+    le scenario que les tests ClotureMensuelleTests bases sur l'ORM ne
+    couvrent pas."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+
+    def test_raw_sql_insert_blocked_by_trigger_when_month_closed(self):
+        ClotureMensuelle.objects.create(
+            employee=self.employee, mois=1, annee=2026, statut=ClotureMensuelle.Statut.CLOTURE
+        )
+
+        with self.assertRaises(DatabaseError) as ctx:
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        INSERT INTO evp_jourtravaille (
+                            employee_id, date, organisation,
+                            heures_travaillees_calcule, heures_travaillees_retenu,
+                            heures_travaillees_modifie_manuellement,
+                            heures_nuit_calcule, heures_nuit_retenu,
+                            heures_nuit_modifie_manuellement,
+                            heures_sup_payees, heures_sup_recuperees
+                        ) VALUES (%s, %s, %s, 0, 0, false, 0, 0, false, 0, 0)
+                        """,
+                        [self.employee.id, datetime.date(2026, 1, 15), "jour"],
+                    )
+        self.assertIn("EVP_MOIS_CLOTURE", str(ctx.exception))
+        self.assertFalse(
+            JourTravaille.objects.filter(
+                employee=self.employee, date=datetime.date(2026, 1, 15)
+            ).exists()
+        )
+
+    def test_raw_sql_update_blocked_by_trigger_once_month_closed(self):
+        jour = JourTravaille.objects.create(
+            employee=self.employee,
+            date=datetime.date(2026, 2, 10),
+            organisation="jour",
+        )
+        ClotureMensuelle.objects.create(
+            employee=self.employee, mois=2, annee=2026, statut=ClotureMensuelle.Statut.CLOTURE
+        )
+
+        with self.assertRaises(DatabaseError) as ctx:
+            with transaction.atomic():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE evp_jourtravaille SET heures_sup_payees = 5 WHERE id = %s",
+                        [jour.pk],
+                    )
+        self.assertIn("EVP_MOIS_CLOTURE", str(ctx.exception))
+        jour.refresh_from_db()
+        self.assertEqual(jour.heures_sup_payees, Decimal("0"))
+
+    def test_raw_sql_write_still_allowed_when_month_is_draft(self):
+        ClotureMensuelle.objects.create(
+            employee=self.employee, mois=3, annee=2026, statut=ClotureMensuelle.Statut.DRAFT
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO evp_jourtravaille (
+                    employee_id, date, organisation,
+                    heures_travaillees_calcule, heures_travaillees_retenu,
+                    heures_travaillees_modifie_manuellement,
+                    heures_nuit_calcule, heures_nuit_retenu,
+                    heures_nuit_modifie_manuellement,
+                    heures_sup_payees, heures_sup_recuperees
+                ) VALUES (%s, %s, %s, 0, 0, false, 0, 0, false, 0, 0)
+                """,
+                [self.employee.id, datetime.date(2026, 3, 15), "jour"],
+            )
+        self.assertTrue(
+            JourTravaille.objects.filter(
+                employee=self.employee, date=datetime.date(2026, 3, 15)
+            ).exists()
+        )
+
+    def test_orm_save_translates_trigger_error_into_validation_error(self):
+        """Meme si clean() bloque deja normalement ce cas avant d'atteindre
+        la base, le save() ORM doit retraduire une eventuelle erreur du
+        trigger en ValidationError Django plutot que de laisser fuiter une
+        DatabaseError brute."""
+        jour = JourTravaille.objects.create(
+            employee=self.employee,
+            date=datetime.date(2026, 4, 5),
+            organisation="jour",
+        )
+        ClotureMensuelle.objects.create(
+            employee=self.employee, mois=4, annee=2026, statut=ClotureMensuelle.Statut.CLOTURE
+        )
+        jour.heures_sup_payees = Decimal("3")
+        with self.assertRaises(ValidationError):
+            jour.save()
