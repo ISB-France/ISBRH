@@ -12,7 +12,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.interviews.models import Campaign, Interview, InterviewTemplate
-from apps.users.models import Notification, Position, Site, User
+from apps.users.models import Notification, Site, User
 
 
 SECTIONS = [

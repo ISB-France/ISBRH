@@ -328,7 +328,8 @@ class UserViewSet(viewsets.ModelViewSet):
             return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         from .models import Augmentation
-        import csv, io
+        import csv
+        import io
         from datetime import datetime
 
         decoded = file.read().decode("utf-8-sig")

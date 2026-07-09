@@ -494,7 +494,6 @@ class CampaignViewSet(viewsets.ModelViewSet):
         )
         oui_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         non_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-        section_fill = PatternFill(start_color="D9E2F3", end_color="D9E2F3", fill_type="solid")
 
         headers = [
             "Type d'entretien", "ID Collaborateur", "Nom et Prénom", "Site",
@@ -514,7 +513,6 @@ class CampaignViewSet(viewsets.ModelViewSet):
             cell.border = thin_border
 
         row_idx = 2
-        first_type = True
         for iv_type, emp_dict in emp_by_type.items():
             type_label = TYPE_LABELS.get(iv_type, iv_type)
 
