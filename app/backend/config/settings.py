@@ -138,5 +138,9 @@ LOGGING = {
             "handlers": ["console"],
             "level": "INFO",
         },
+        "apps.users.views": {
+            "handlers": ["console"],
+            "level": "WARNING",
+        },
     },
 }
