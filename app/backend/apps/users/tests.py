@@ -17,6 +17,37 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.users.models import Augmentation, Evolution, Formation, Position, User
 
 
+class LogoutBlacklistsRefreshTokenTests(TestCase):
+    """Le logout doit reellement invalider le refresh token (app
+    token_blacklist installee), pas seulement renvoyer 204 sans effet."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_logout_blacklists_refresh_token(self):
+        refresh = RefreshToken.for_user(self.user)
+        response = self.client.post(
+            "/api/auth/logout/", {"refresh": str(refresh)}, format="json"
+        )
+        self.assertEqual(response.status_code, 204)
+
+        refresh_client = APIClient()
+        refresh_response = refresh_client.post(
+            "/api/token/refresh/", {"refresh": str(refresh)}, format="json"
+        )
+        self.assertEqual(refresh_response.status_code, 401)
+
+    def test_logout_with_already_invalid_token_still_returns_204(self):
+        response = self.client.post(
+            "/api/auth/logout/", {"refresh": "not-a-valid-token"}, format="json"
+        )
+        self.assertEqual(response.status_code, 204)
+
+
 class AdminRoleProtectionTests(TestCase):
     """Le role "admin" ne doit jamais pouvoir etre attribue via l'API, le
     formulaire, ou une modification directe en base qui contournerait le

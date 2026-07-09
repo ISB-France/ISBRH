@@ -15,6 +15,7 @@ from rest_framework import filters, generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.db import models as db_models
@@ -882,11 +883,11 @@ class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh")
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-        except Exception:
-            pass
+        refresh_token = request.data.get("refresh")
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                # Token deja invalide/expire/blackliste : rien de plus a faire.
+                pass
         return Response(status=status.HTTP_204_NO_CONTENT)
