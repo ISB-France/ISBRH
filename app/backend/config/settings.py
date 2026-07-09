@@ -118,6 +118,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_THROTTLE_RATES": {
         "dev_login": "5/min",
+        "evp_badge_auth": "10/min",
     },
 }
 

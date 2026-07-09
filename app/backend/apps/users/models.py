@@ -119,6 +119,16 @@ class User(AbstractUser):
     )
     agence_interim = models.CharField(max_length=100, blank=True)
 
+    # EVP (Éléments Variables de Paie)
+    # code_badge est volontairement distinct de matricule : un badge peut
+    # être perdu/remplacé sans jamais toucher à l'identifiant paie.
+    code_badge = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    # is_manager_evp est une permission explicite et INDÉPENDANTE de
+    # role="manager" : un manager d'entretien n'a pas automatiquement accès
+    # à la saisie EVP (et inversement, un manager EVP n'est pas forcément
+    # un manager d'entretien). Ne jamais déduire l'un de l'autre.
+    is_manager_evp = models.BooleanField(default=False)
+
     # Ancien champ obsolète, conservé temporairement
     onboarding_status = models.CharField(
         max_length=20,

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Evolution, Notification, Position, Service, Site, User
+from .models import RH_ROLES, Evolution, Notification, Position, Service, Site, User
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -48,6 +48,7 @@ class UserSerializer(serializers.ModelSerializer):
             "manager", "manager_name", "agence_interim",
             "icon",
             "preferences",
+            "code_badge", "is_manager_evp",
         ]
 
     def get_manager_name(self, obj):
@@ -59,6 +60,23 @@ class UserSerializer(serializers.ModelSerializer):
         if value == "admin":
             raise serializers.ValidationError("Le rôle admin ne peut pas être attribué via ce formulaire")
         return value
+
+    def _validate_rh_only_field(self, value, field_name):
+        request = self.context.get("request")
+        if request is None:
+            return value
+        current_value = getattr(self.instance, field_name, None)
+        if request.user.role not in RH_ROLES and value != current_value:
+            raise serializers.ValidationError(
+                "Seul un compte RH/Admin peut modifier ce champ."
+            )
+        return value
+
+    def validate_code_badge(self, value):
+        return self._validate_rh_only_field(value, "code_badge")
+
+    def validate_is_manager_evp(self, value):
+        return self._validate_rh_only_field(value, "is_manager_evp")
 
     def create(self, validated_data):
         validated_data["username"] = validated_data["email"]

@@ -6,6 +6,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from apps.users.views import OIDCAuthenticationRequestView, OIDCCallbackView, MeView, UserViewSet, SiteViewSet, ServiceViewSet, PositionViewSet, NotificationViewSet, DevLoginView, LogoutView, ProfileAvatarView, SSOLoginView
 from apps.interviews.views import CampaignViewSet, InterviewTemplateViewSet, InterviewViewSet
+from apps.evp.views import AbsenceViewSet, BadgeAuthView, ClotureMensuelleStatutView, JourTravailleViewSet
 
 router = DefaultRouter()
 router.register("interviews", InterviewViewSet, basename="interview")
@@ -43,6 +44,11 @@ urlpatterns = [
     path("api/campaigns/<int:pk>/delete_all_interviews/", CampaignViewSet.as_view({"post": "delete_all_interviews"}), name="campaign-delete-all-interviews"),
     path("api/campaigns/<int:pk>/reassign_managers/", CampaignViewSet.as_view({"post": "reassign_managers"}), name="campaign-reassign-managers"),
     path("api/campaigns/<int:pk>/export_contents_xlsx/", CampaignViewSet.as_view({"get": "export_contents_xlsx"}), name="campaign-export-contents-xlsx"),
+    path("api/evp/badge-auth/", BadgeAuthView.as_view(), name="evp-badge-auth"),
+    path("api/evp/jours-travailles/", JourTravailleViewSet.as_view({"get": "list"}), name="evp-jourtravaille-list"),
+    path("api/evp/jours-travailles/<int:pk>/", JourTravailleViewSet.as_view({"patch": "partial_update"}), name="evp-jourtravaille-detail"),
+    path("api/evp/absences/", AbsenceViewSet.as_view({"get": "list", "post": "create"}), name="evp-absence-list"),
+    path("api/evp/cloture-mensuelle/", ClotureMensuelleStatutView.as_view(), name="evp-cloture-mensuelle"),
     path("api/", include(router.urls)),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
