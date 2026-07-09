@@ -113,6 +113,8 @@ class InterviewViewSet(viewsets.ModelViewSet):
             content = {}
         if template and not content.get("sections"):
             content["sections"] = list(template.sections)
+        if template:
+            serializer.validated_data["template_snapshot"] = list(template.sections)
         if employee:
             content["employee_snapshot"] = {
                 "position": employee.position.name if employee.position else None,
@@ -227,6 +229,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
         return {
             "interview": interview,
             "sections": sections,
+            "template_sections": interview.get_effective_template_sections(),
             "history": all_past[:6],
             "career": career,
             "training_history": training_history,
@@ -398,6 +401,12 @@ class CampaignViewSet(viewsets.ModelViewSet):
             if service:
                 qs = qs.filter(service_id=service)
 
+        if not qs.exists():
+            return Response(
+                {"error": "Aucun collaborateur ne correspond aux critères de ce filtre"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         created = 0
         for user in qs:
             _, was_created = Interview.objects.get_or_create(
@@ -406,6 +415,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 type=template.type,
                 defaults={
                     "template": template,
+                    "template_snapshot": list(template.sections),
                     "content": {
                         "sections": list(template.sections),
                         "employee_snapshot": {

@@ -1,13 +1,14 @@
 from rest_framework import serializers
 from .models import Campaign, Interview, InterviewTemplate
+from apps.users.models import Service, Site, User
 from apps.users.serializers import UserSerializer
 
 
 class InterviewTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewTemplate
-        fields = ["id", "name", "type", "description", "sections", "created_at", "updated_at"]
-        read_only_fields = ["created_at", "updated_at"]
+        fields = ["id", "name", "type", "description", "sections", "version", "created_at", "updated_at"]
+        read_only_fields = ["version", "created_at", "updated_at"]
 
 
 class CampaignSerializer(serializers.ModelSerializer):
@@ -26,11 +27,42 @@ class CampaignSerializer(serializers.ModelSerializer):
     def get_interview_count(self, obj):
         return obj.interviews.count()
 
+    def validate_population_filter(self, value):
+        if not isinstance(value, dict):
+            return value
+
+        invalid = []
+
+        site_id = value.get("site")
+        if site_id and not Site.objects.filter(pk=site_id).exists():
+            invalid.append(f"site {site_id}")
+
+        service_id = value.get("service")
+        if service_id and not Service.objects.filter(pk=service_id).exists():
+            invalid.append(f"service {service_id}")
+
+        employee_ids = value.get("employees")
+        if employee_ids:
+            existing_ids = set(
+                User.objects.filter(pk__in=employee_ids).values_list("id", flat=True)
+            )
+            missing_ids = [e for e in employee_ids if e not in existing_ids]
+            if missing_ids:
+                invalid.append(f"employé(s) {missing_ids}")
+
+        if invalid:
+            raise serializers.ValidationError(
+                f"population_filter référence des enregistrements inexistants : {', '.join(invalid)}"
+            )
+
+        return value
+
 
 class InterviewSerializer(serializers.ModelSerializer):
     employee_detail = UserSerializer(source="employee", read_only=True)
     manager_detail = UserSerializer(source="manager", read_only=True)
     template_name = serializers.CharField(source="template.name", read_only=True, default="")
+    template_sections = serializers.SerializerMethodField()
     employee_manager_name = serializers.SerializerMethodField()
     employee_manager_id = serializers.SerializerMethodField()
     document_url = serializers.SerializerMethodField()
@@ -45,7 +77,7 @@ class InterviewSerializer(serializers.ModelSerializer):
         fields = [
             "id", "employee", "employee_detail",
             "manager", "manager_detail",
-            "campaign", "template", "template_name",
+            "campaign", "template", "template_name", "template_sections",
             "employee_manager_name", "employee_manager_id",
             "type", "status", "due_date", "content",
             "document_url",
@@ -57,6 +89,9 @@ class InterviewSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
         read_only_fields = ["manager", "created_at", "updated_at"]
+
+    def get_template_sections(self, obj):
+        return obj.get_effective_template_sections()
 
     def get_employee_manager_name(self, obj):
         if obj.employee.manager:

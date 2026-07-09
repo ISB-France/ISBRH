@@ -1,0 +1,188 @@
+import datetime
+
+from django.test import TestCase
+from rest_framework.test import APIClient
+
+from apps.interviews.models import Campaign, Interview, InterviewTemplate
+from apps.users.models import Site, User
+
+
+SECTIONS_V1 = [
+    {"id": "s1", "title": "Section 1", "questions": [{"id": "q1", "label": "Question 1", "type": "textarea", "answer": ""}]}
+]
+SECTIONS_V2 = [
+    {"id": "s1", "title": "Section 1 modifiée", "questions": [{"id": "q1", "label": "Question 1 modifiée", "type": "textarea", "answer": ""}]}
+]
+
+
+class TemplateSnapshotTests(TestCase):
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+        self.template = InterviewTemplate.objects.create(
+            name="Template annuel", type="annual", sections=SECTIONS_V1
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_creating_interview_captures_template_snapshot(self):
+        response = self.client.post(
+            "/api/interviews/",
+            {
+                "employee": self.employee.id,
+                "template": self.template.id,
+                "type": "annual",
+                "due_date": "2026-12-31",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        self.assertEqual(interview.template_snapshot, SECTIONS_V1)
+
+    def test_modifying_template_after_creation_does_not_change_existing_snapshot(self):
+        interview = Interview.objects.create(
+            employee=self.employee,
+            manager=self.rh_user,
+            template=self.template,
+            template_snapshot=list(self.template.sections),
+            type="annual",
+            due_date=datetime.date(2026, 12, 31),
+        )
+
+        self.template.sections = SECTIONS_V2
+        self.template.save()
+
+        interview.refresh_from_db()
+        self.assertEqual(interview.template_snapshot, SECTIONS_V1)
+        self.assertEqual(self.template.sections, SECTIONS_V2)
+
+    def test_template_version_increments_on_sections_change(self):
+        self.assertEqual(self.template.version, 1)
+
+        self.template.sections = SECTIONS_V2
+        self.template.save()
+        self.template.refresh_from_db()
+        self.assertEqual(self.template.version, 2)
+
+        # Saving again without changing sections must not bump the version.
+        self.template.name = "Template annuel (renommé)"
+        self.template.save()
+        self.template.refresh_from_db()
+        self.assertEqual(self.template.version, 2)
+
+    def test_template_version_increments_via_api_patch(self):
+        response = self.client.patch(
+            f"/api/interview-templates/{self.template.id}/",
+            {"sections": SECTIONS_V2},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.template.refresh_from_db()
+        self.assertEqual(self.template.version, 2)
+
+    def test_effective_template_sections_falls_back_when_snapshot_missing(self):
+        interview = Interview.objects.create(
+            employee=self.employee,
+            manager=self.rh_user,
+            template=self.template,
+            type="annual",
+            due_date=datetime.date(2026, 12, 31),
+        )
+        self.assertIsNone(interview.template_snapshot)
+        self.assertEqual(interview.get_effective_template_sections(), self.template.sections)
+
+    def test_campaign_generate_captures_template_snapshot(self):
+        campaign = Campaign.objects.create(
+            name="Campagne annuelle",
+            template=self.template,
+            start_date=datetime.date(2026, 1, 1),
+            due_date=datetime.date(2026, 12, 31),
+            population_filter={"employees": [self.employee.id]},
+        )
+        response = self.client.post(f"/api/campaigns/{campaign.id}/generate/")
+        self.assertEqual(response.status_code, 200, response.data)
+
+        interview = Interview.objects.get(campaign=campaign, employee=self.employee)
+        self.assertEqual(interview.template_snapshot, SECTIONS_V1)
+
+
+class CampaignPopulationFilterValidationTests(TestCase):
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+        self.site = Site.objects.create(name="Paris")
+        self.template = InterviewTemplate.objects.create(
+            name="Template annuel", type="annual", sections=SECTIONS_V1
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def _campaign_payload(self, population_filter):
+        return {
+            "name": "Campagne test",
+            "template": self.template.id,
+            "start_date": "2026-01-01",
+            "due_date": "2026-12-31",
+            "population_filter": population_filter,
+        }
+
+    def test_create_campaign_with_unknown_site_id_rejected(self):
+        response = self.client.post(
+            "/api/campaigns/", self._campaign_payload({"site": 999999}), format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("population_filter", response.data)
+
+    def test_create_campaign_with_unknown_employee_id_rejected(self):
+        response = self.client.post(
+            "/api/campaigns/", self._campaign_payload({"employees": [999999]}), format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("population_filter", response.data)
+
+    def test_create_campaign_with_valid_filter_accepted(self):
+        response = self.client.post(
+            "/api/campaigns/",
+            self._campaign_payload({"site": self.site.id, "employees": [self.employee.id]}),
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_update_campaign_with_unknown_site_id_rejected(self):
+        campaign = Campaign.objects.create(
+            name="Campagne",
+            template=self.template,
+            start_date=datetime.date(2026, 1, 1),
+            due_date=datetime.date(2026, 12, 31),
+            population_filter={},
+        )
+        response = self.client.patch(
+            f"/api/campaigns/{campaign.id}/",
+            {"population_filter": {"service": 999999}},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("population_filter", response.data)
+
+    def test_generate_with_no_matching_employees_returns_explicit_error(self):
+        other_site = Site.objects.create(name="Lyon")
+        campaign = Campaign.objects.create(
+            name="Campagne vide",
+            template=self.template,
+            start_date=datetime.date(2026, 1, 1),
+            due_date=datetime.date(2026, 12, 31),
+            population_filter={"site": other_site.id},
+        )
+        response = self.client.post(f"/api/campaigns/{campaign.id}/generate/")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Aucun collaborateur", response.data.get("error", ""))
+        self.assertEqual(Interview.objects.filter(campaign=campaign).count(), 0)
