@@ -429,3 +429,41 @@ class CsvUploadValidationTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("volumineux", response.data["error"])
+
+
+class HistoryRecordsProtectEmployeeDeletionTests(TestCase):
+    """Formation, Augmentation et Evolution sont de l'historique employe :
+    leur employe ne doit pas pouvoir etre supprime silencieusement."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+
+    def test_deleting_employee_with_formation_is_blocked(self):
+        from django.db.models import ProtectedError
+
+        Formation.objects.create(employee=self.employee, libelle="Formation Python")
+        with self.assertRaises(ProtectedError):
+            self.employee.delete()
+
+    def test_deleting_employee_with_augmentation_is_blocked(self):
+        from django.db.models import ProtectedError
+
+        Augmentation.objects.create(employee=self.employee, montant=1000)
+        with self.assertRaises(ProtectedError):
+            self.employee.delete()
+
+    def test_deleting_employee_with_evolution_is_blocked(self):
+        from django.db.models import ProtectedError
+
+        Evolution.objects.create(
+            employee=self.employee, type_evolution="poste",
+            ancienne_valeur="A", nouvelle_valeur="B",
+        )
+        with self.assertRaises(ProtectedError):
+            self.employee.delete()
+
+    def test_deleting_employee_without_history_still_works(self):
+        self.employee.delete()
+        self.assertFalse(User.objects.filter(pk=self.employee.pk).exists())

@@ -164,7 +164,7 @@ RH_ROLES = ["admin", "rh"]
 
 
 class Formation(models.Model):
-    employee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="formations")
+    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name="formations")
     matricule = models.CharField(max_length=50, blank=True)
     domaine = models.CharField(max_length=255, blank=True)
     libelle = models.CharField(max_length=255, blank=True)
@@ -177,7 +177,7 @@ class Formation(models.Model):
 
 
 class Augmentation(models.Model):
-    employee = models.ForeignKey(User, on_delete=models.CASCADE, related_name="augmentations")
+    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name="augmentations")
     matricule = models.CharField(max_length=50, blank=True)
     date_effet = models.DateField(null=True, blank=True)
     montant = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
