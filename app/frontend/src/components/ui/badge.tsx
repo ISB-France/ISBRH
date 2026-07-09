@@ -12,6 +12,10 @@ const badgeVariants = cva(
         destructive: "border-transparent bg-destructive text-destructive-foreground shadow",
         outline: "text-foreground",
         draft: "border-transparent bg-muted text-muted-foreground",
+        // Alias generiques (memes teintes que in_progress/professional
+        // ci-dessous) pour un usage hors contexte entretiens.
+        info: "border-transparent bg-blue-100 text-blue-700",
+        warning: "border-transparent bg-amber-100 text-amber-700",
         in_progress: "border-transparent bg-blue-100 text-blue-700",
         completed: "border-transparent bg-green-100 text-green-700",
         cancelled: "border-transparent bg-red-100 text-red-700",

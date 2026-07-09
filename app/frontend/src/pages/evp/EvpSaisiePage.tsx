@@ -5,6 +5,7 @@ import { eachDayOfInterval, endOfMonth, format, startOfMonth } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../../api";
 import AppLayout from "../../components/AppLayout";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Toast, useToast } from "../../components/Toast";
 import { useInactivityLogout } from "../../hooks/useInactivityLogout";
@@ -229,7 +230,7 @@ export default function EvpSaisiePage() {
                 </div>
 
                 {moisFerme && (
-                  <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                  <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
                     Ce mois est clôturé pour ce collaborateur : lecture seule, aucune
                     modification n'est possible.
                   </div>
@@ -327,12 +328,12 @@ export default function EvpSaisiePage() {
                                       }
                                     />
                                     {jour.heures_travaillees_modifie_manuellement && (
-                                      <span
+                                      <Badge
+                                        variant="warning"
                                         title={jour.heures_travaillees_motif_modification ?? ""}
-                                        className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
                                       >
                                         Modifié
-                                      </span>
+                                      </Badge>
                                     )}
                                   </div>
                                 ) : (
@@ -344,13 +345,10 @@ export default function EvpSaisiePage() {
                               </td>
                               <td className="py-2 pr-3">
                                 {dayAbsences.map((a) => (
-                                  <span
-                                    key={a.id}
-                                    className="mr-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
-                                  >
+                                  <Badge key={a.id} variant="info" className="mr-1">
                                     {ABSENCE_CODES.find((c) => c.value === a.code_absence)?.label ??
                                       a.code_absence}
-                                  </span>
+                                  </Badge>
                                 ))}
                               </td>
                               <td className="py-2 pr-3">
