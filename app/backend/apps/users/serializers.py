@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Notification, Position, Service, Site, User
+from .models import Evolution, Notification, Position, Service, Site, User
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -63,6 +63,22 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data["username"] = validated_data["email"]
         return super().create(validated_data)
+
+
+class EvolutionSerializer(serializers.ModelSerializer):
+    auteur_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Evolution
+        fields = [
+            "id", "type_evolution", "ancienne_valeur", "nouvelle_valeur",
+            "date_effet", "auteur", "auteur_name", "created_at",
+        ]
+
+    def get_auteur_name(self, obj):
+        if obj.auteur:
+            return obj.auteur.get_full_name() or obj.auteur.email
+        return None
 
 
 class UserMeSerializer(serializers.ModelSerializer):

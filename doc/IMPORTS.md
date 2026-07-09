@@ -1,6 +1,6 @@
 # Imports CSV
 
-Quatre imports sont disponibles depuis la page **Utilisateurs** (réservé aux rôles RH/Admin).
+Quatre imports sont disponibles depuis la page **Utilisateurs** (réservé aux rôles RH/Admin), plus un import de modèles d'entretien depuis la page **Modèles** (réservé aux rôles RH/Admin/Manager).
 
 ---
 
@@ -139,6 +139,43 @@ Matricule,Date,Montant Augmentation
 
 ---
 
+## 5. Import modèles d'entretien
+
+**Endpoint :** `POST /api/interview-templates/import_csv/`
+
+Crée des modèles d'entretien (`InterviewTemplate`) à partir d'un CSV décrivant
+leurs sections et questions. Réservé aux rôles RH/Admin/Manager. Chaque ligne
+décrit une question ; les lignes partageant `name`+`type`+`description`
+forment un même modèle, et celles partageant en plus `section_id` forment une
+même section.
+
+### Colonnes du CSV
+
+| Colonne | Description | Exemple |
+|---|---|---|
+| `name` | Nom du modèle (clé de regroupement) | `Entretien annuel` |
+| `type` | Type d'entretien (`annual`/`professional`/`bilan`/`forfait`/`fin_carriere`) | `annual` |
+| `description` | Description du modèle | `Modèle standard` |
+| `section_id` | Identifiant de section (défaut `s1`) | `s1` |
+| `section_title` | Titre de la section | `Bilan de l'année` |
+| `question_id` | Identifiant de la question | `q1` |
+| `question_label` | Libellé de la question | `Principales réalisations` |
+| `question_type` | `textarea` / `rating` / `yesno` / `table` (défaut `textarea` si absent ou invalide) | `textarea` |
+
+### Règles
+- **Clé de regroupement :** `name` + `type` + `description`
+- Une ligne sans `section_title` ni `question_label` est ignorée
+- Une ligne sans `question_id`/`question_label` renseignés ne crée que la section (pas de question)
+- Toujours en création : aucune mise à jour d'un modèle existant du même nom
+
+### Exemple de ligne
+```
+name,type,description,section_id,section_title,question_id,question_label,question_type
+Entretien annuel,annual,Modèle standard,s1,Bilan de l'année,q1,Principales réalisations,textarea
+```
+
+---
+
 ## Format général des CSV
 
 - **Encodage :** UTF-8 avec ou sans BOM (accepté)
@@ -148,15 +185,49 @@ Matricule,Date,Montant Augmentation
 
 ## Ordre d'import recommandé
 
-1. **Import collaborateurs** (ou Kostango) — crée la base des salariés avec leurs matricules
-2. **Import formations** — les formations sont rattachées aux matricules existants
-3. **Import augmentations** — les augmentations sont rattachées aux matricules existants
+1. **Import Kostango** — crée la base des salariés avec leur **email réel** et leur matricule
+2. **Import collaborateurs** — vient ensuite compléter/mettre à jour les mêmes personnes par **matricule**
+3. **Import formations** — les formations sont rattachées aux matricules existants
+4. **Import augmentations** — les augmentations sont rattachées aux matricules existants
+
+⚠️ **Toujours importer Kostango avant collaborateurs.** Si un collaborateur est
+importé via `import_collaborateurs` avant d'avoir été créé par `import_kostango`,
+et que son matricule n'est reconnu par aucun utilisateur existant, un compte est
+créé avec un **email temporaire** (`{matricule}@collaborateur.isb.fr`). Si ce même
+collaborateur est ensuite importé via Kostango (matching par email réel), Kostango
+ne retrouvera pas le compte temporaire (clé différente) et créera un **second**
+compte pour la même personne : c'est un doublon. Faire l'import Kostango en
+premier évite ce cas, puisque l'import collaborateurs retrouvera alors le compte
+existant par matricule et le mettra à jour au lieu d'en créer un nouveau.
+
+Chaque création d'utilisateur avec un email temporaire lors de l'import
+collaborateurs est signalée par un `WARNING` dans les logs applicatifs
+(`apps.users.views`) : `Aucun utilisateur trouvé pour le matricule X, création
+avec email temporaire`. Surveillez ces logs après un import en masse.
+
+## Détecter les doublons après import
+
+Après tout import en masse (Kostango et/ou collaborateurs), exécuter :
+
+```
+python manage.py detect_duplicate_users
+```
+
+Cette commande liste les utilisateurs potentiellement dupliqués : même
+prénom + nom + date de naissance, mais matricule et email différents (typiquement
+un compte créé par Kostango avec un email réel, et un second créé par l'import
+collaborateurs avec un email temporaire `@collaborateur.isb.fr`). Elle n'effectue
+aucune fusion automatique — la résolution (fusion manuelle ou suppression du
+compte temporaire) reste à la charge de l'équipe RH.
 
 ## Dépannage
 
 - Les erreurs sont retournées ligne par ligne avec le détail
 - En cas d'échec partiel, les lignes valides sont tout de même importées
 - Le doublon sur `matricule` (collaborateurs) ou `email` (Kostango) déclenche une mise à jour, pas un rejet
+- Le doublon **entre** les deux imports (personne créée deux fois, une fois par
+  chacun) n'est pas détecté automatiquement à l'import : voir
+  `detect_duplicate_users` ci-dessus
 
 ## Questions fréquentes
 

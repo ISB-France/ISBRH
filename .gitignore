@@ -6,6 +6,8 @@ __pycache__/
 venv/
 env/
 *.egg
+.coverage
+htmlcov/
 
 # Django
 staticfiles/

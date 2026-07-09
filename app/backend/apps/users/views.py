@@ -5,6 +5,7 @@ from django.shortcuts import redirect
 from django.utils.crypto import get_random_string
 import csv
 import io
+import logging
 
 from mozilla_django_oidc.utils import add_state_and_verifier_and_nonce_to_session
 from mozilla_django_oidc.views import OIDCAuthenticationRequestView as BaseRequestView
@@ -13,13 +14,17 @@ from mozilla_django_oidc.views import OIDCAuthenticationCallbackView as BaseCall
 from rest_framework import filters, generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.db import models as db_models
 
-from .models import RH_ROLES, Notification, Position, Service, Site, User
+from .models import RH_ROLES, Evolution, Notification, Position, Service, Site, User
+from .validators import validate_csv_upload
 from .serializers import (
+    EvolutionSerializer,
     NotificationSerializer,
     PositionSerializer,
     ServiceSerializer,
@@ -27,6 +32,8 @@ from .serializers import (
     UserMeSerializer,
     UserSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_subordinate_ids(user_id):
@@ -149,6 +156,12 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return qs
 
+    @action(detail=True, methods=["get"])
+    def evolutions(self, request, pk=None):
+        user = self.get_object()
+        qs = Evolution.objects.filter(employee=user).order_by("date_effet", "created_at")
+        return Response(EvolutionSerializer(qs, many=True).data)
+
     @staticmethod
     def _parse_date(value):
         if not value:
@@ -169,6 +182,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -248,6 +264,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         from .models import Formation
         import csv
@@ -304,9 +323,13 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         from .models import Augmentation
-        import csv, io
+        import csv
+        import io
         from datetime import datetime
 
         decoded = file.read().decode("utf-8-sig")
@@ -359,6 +382,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -411,6 +437,12 @@ class UserViewSet(viewsets.ModelViewSet):
                     },
                 )
                 if created_flag:
+                    logger.warning(
+                        "Aucun utilisateur trouvé pour le matricule %s, "
+                        "création avec email temporaire (%s)",
+                        matricule,
+                        user.email,
+                    )
                     user.set_unusable_password()
                     user.save()
                     created += 1
@@ -447,6 +479,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -841,10 +876,18 @@ class SSOLoginView(APIView):
         })
 
 
+class DevLoginThrottle(AnonRateThrottle):
+    scope = "dev_login"
+
+
 class DevLoginView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [DevLoginThrottle]
 
     def post(self, request):
+        if not settings.DEBUG:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
         from django.contrib.auth import authenticate
 
         email = request.data.get("email", "").strip().lower()
@@ -866,11 +909,11 @@ class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh")
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-        except Exception:
-            pass
+        refresh_token = request.data.get("refresh")
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                # Token deja invalide/expire/blackliste : rien de plus a faire.
+                pass
         return Response(status=status.HTTP_204_NO_CONTENT)

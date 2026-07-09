@@ -12,6 +12,18 @@ from rest_framework.response import Response
 from .models import Campaign, Interview, InterviewTemplate
 from .serializers import CampaignSerializer, InterviewSerializer, InterviewTemplateSerializer
 from apps.users.models import RH_ROLES, User
+from apps.users.validators import validate_csv_upload
+
+FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_cell_value(value):
+    """Neutralise l'injection de formule Excel : une cellule dont la valeur
+    commence par un caractere declencheur de formule est prefixee par une
+    apostrophe pour forcer son interpretation comme texte a l'ouverture."""
+    if isinstance(value, str) and value.startswith(FORMULA_TRIGGER_CHARS):
+        return "'" + value
+    return value
 
 
 class InterviewPermission(permissions.BasePermission):
@@ -113,6 +125,8 @@ class InterviewViewSet(viewsets.ModelViewSet):
             content = {}
         if template and not content.get("sections"):
             content["sections"] = list(template.sections)
+        if template:
+            serializer.validated_data["template_snapshot"] = list(template.sections)
         if employee:
             content["employee_snapshot"] = {
                 "position": employee.position.name if employee.position else None,
@@ -227,6 +241,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
         return {
             "interview": interview,
             "sections": sections,
+            "template_sections": interview.get_effective_template_sections(),
             "history": all_past[:6],
             "career": career,
             "training_history": training_history,
@@ -294,6 +309,9 @@ class InterviewTemplateViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Aucun fichier fourni"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         reader = csv.DictReader(io.StringIO(file.read().decode("utf-8-sig")))
         rows = list(reader)
@@ -398,6 +416,12 @@ class CampaignViewSet(viewsets.ModelViewSet):
             if service:
                 qs = qs.filter(service_id=service)
 
+        if not qs.exists():
+            return Response(
+                {"error": "Aucun collaborateur ne correspond aux critères de ce filtre"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         created = 0
         for user in qs:
             _, was_created = Interview.objects.get_or_create(
@@ -406,6 +430,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 type=template.type,
                 defaults={
                     "template": template,
+                    "template_snapshot": list(template.sections),
                     "content": {
                         "sections": list(template.sections),
                         "employee_snapshot": {
@@ -469,7 +494,6 @@ class CampaignViewSet(viewsets.ModelViewSet):
         )
         oui_fill = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
         non_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
-        section_fill = PatternFill(start_color="D9E2F3", end_color="D9E2F3", fill_type="solid")
 
         headers = [
             "Type d'entretien", "ID Collaborateur", "Nom et Prénom", "Site",
@@ -489,7 +513,6 @@ class CampaignViewSet(viewsets.ModelViewSet):
             cell.border = thin_border
 
         row_idx = 2
-        first_type = True
         for iv_type, emp_dict in emp_by_type.items():
             type_label = TYPE_LABELS.get(iv_type, iv_type)
 
@@ -645,7 +668,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                     row_data.append(answers.get(_qid, ""))
 
                 for col_idx, val in enumerate(row_data, 1):
-                    cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                    cell = ws.cell(row=row_idx, column=col_idx, value=sanitize_cell_value(val))
                     cell.border = thin_border
                     cell.alignment = Alignment(vertical="top", wrap_text=True)
 

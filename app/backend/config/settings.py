@@ -2,11 +2,25 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "insecure-dev-key-change-in-prod")
+INSECURE_DEFAULT_SECRET_KEY = "insecure-dev-key-change-in-prod"
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", INSECURE_DEFAULT_SECRET_KEY)
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
+
+if not DEBUG:
+    if SECRET_KEY == INSECURE_DEFAULT_SECRET_KEY:
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY doit être défini explicitement quand DEBUG=False."
+        )
+    if ALLOWED_HOSTS == ["*"]:
+        raise ImproperlyConfigured(
+            "ALLOWED_HOSTS doit être défini explicitement quand DEBUG=False."
+        )
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -16,6 +30,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "mozilla_django_oidc",
     "apps.users",
@@ -100,6 +115,9 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": (
         "rest_framework.renderers.JSONRenderer",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "dev_login": "5/min",
+    },
 }
 
 SIMPLE_JWT = {
@@ -137,6 +155,10 @@ LOGGING = {
         "apps.users.backends": {
             "handlers": ["console"],
             "level": "INFO",
+        },
+        "apps.users.views": {
+            "handlers": ["console"],
+            "level": "WARNING",
         },
     },
 }
