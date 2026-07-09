@@ -1,6 +1,8 @@
 import datetime
+import io
 
 from django.test import TestCase
+from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
 from apps.interviews.models import Campaign, Interview, InterviewTemplate
@@ -237,3 +239,63 @@ class InterviewEmployeeDeletionTests(TestCase):
 
         self.assertTrue(Interview.objects.filter(pk=interview.pk).exists())
         self.assertTrue(User.objects.filter(pk=employee.pk).exists())
+
+
+class ExcelExportFormulaInjectionTests(TestCase):
+    """Une reponse d'entretien commencant par un caractere declencheur de
+    formule (=, +, -, @) ne doit pas etre ecrite telle quelle dans l'export
+    Excel : elle doit etre neutralisee (prefixee par une apostrophe)."""
+
+    def test_malicious_answer_is_sanitized_in_contents_export(self):
+        rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager,
+        )
+        campaign = Campaign.objects.create(
+            name="Campagne export",
+            start_date=datetime.date(2026, 1, 1),
+            due_date=datetime.date(2026, 12, 31),
+        )
+        Interview.objects.create(
+            employee=employee, manager=manager, campaign=campaign,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+            content={
+                "sections": [
+                    {
+                        "id": "s1",
+                        "title": "Section 1",
+                        "questions": [
+                            {
+                                "id": "q1",
+                                "label": "Commentaire",
+                                "type": "textarea",
+                                "answer": "=cmd|'/c calc'!A0",
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=rh_user)
+        response = client.get(f"/api/campaigns/{campaign.id}/export_contents_xlsx/")
+        self.assertEqual(response.status_code, 200)
+
+        wb = load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        answer_col = None
+        for cell in ws[1]:
+            if cell.value == "Commentaire":
+                answer_col = cell.column
+        self.assertIsNotNone(answer_col)
+
+        cell_value = ws.cell(row=2, column=answer_col).value
+        self.assertTrue(cell_value.startswith("'="))
+        self.assertIn("cmd", cell_value)

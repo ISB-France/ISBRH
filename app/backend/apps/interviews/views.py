@@ -14,6 +14,17 @@ from .serializers import CampaignSerializer, InterviewSerializer, InterviewTempl
 from apps.users.models import RH_ROLES, User
 from apps.users.validators import validate_csv_upload
 
+FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_cell_value(value):
+    """Neutralise l'injection de formule Excel : une cellule dont la valeur
+    commence par un caractere declencheur de formule est prefixee par une
+    apostrophe pour forcer son interpretation comme texte a l'ouverture."""
+    if isinstance(value, str) and value.startswith(FORMULA_TRIGGER_CHARS):
+        return "'" + value
+    return value
+
 
 class InterviewPermission(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -659,7 +670,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                     row_data.append(answers.get(_qid, ""))
 
                 for col_idx, val in enumerate(row_data, 1):
-                    cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                    cell = ws.cell(row=row_idx, column=col_idx, value=sanitize_cell_value(val))
                     cell.border = thin_border
                     cell.alignment = Alignment(vertical="top", wrap_text=True)
 
