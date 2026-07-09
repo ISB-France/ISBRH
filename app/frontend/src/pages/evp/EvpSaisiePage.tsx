@@ -21,8 +21,6 @@ import {
 // Déconnexion automatique du poste partagé après cette durée d'inactivité.
 const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
-const MANAGER_ROLES = ["manager", "admin", "rh"];
-
 function logoutToBadgeScan(navigate: (path: string) => void) {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
@@ -175,13 +173,13 @@ export default function EvpSaisiePage() {
           </Button>
         </div>
 
-        {currentUser && !MANAGER_ROLES.includes(currentUser.role) && (
+        {currentUser && !currentUser.is_manager_evp && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
-            Ce compte n'a pas les droits manager nécessaires pour accéder à la saisie EVP.
+            Ce compte n'a pas les droits manager EVP nécessaires pour accéder à la saisie.
           </div>
         )}
 
-        {currentUser && MANAGER_ROLES.includes(currentUser.role) && (
+        {currentUser && currentUser.is_manager_evp && (
           <>
             <div className="rounded-lg border border-border bg-white p-4">
               <label className="mb-2 block text-sm font-medium text-muted-foreground">

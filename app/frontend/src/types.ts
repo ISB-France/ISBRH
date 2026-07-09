@@ -52,7 +52,8 @@ export interface User {
   agence_interim: string;
   icon: string;
   preferences: string;
-
+  code_badge: string | null;
+  is_manager_evp: boolean;
 }
 
 export interface Campaign {

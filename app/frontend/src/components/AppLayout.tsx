@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, Users, FileText, LogOut, Menu, X, FileEdit, Flag, Bell } from "lucide-react";
+import { LayoutDashboard, Users, FileText, LogOut, Menu, X, FileEdit, Flag, Bell, CalendarClock } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { cn, formatDate } from "../lib/utils";
 import { Button } from "./ui/button";
@@ -15,6 +15,10 @@ const navItems = [
   { to: "/campaigns", icon: Flag, label: "Campagnes", role: "rh" },
   { to: "/templates", icon: FileEdit, label: "Modèles", role: "rh" },
   { to: "/users", icon: Users, label: "Utilisateurs" },
+  // "EVP" reprend le nom déjà utilisé partout ailleurs dans le projet
+  // (apps/evp, ClotureMensuelle, etc.) plutôt que "Plannings", qui
+  // n'apparaît nulle part dans le vocabulaire existant.
+  { to: "/evp/saisie", icon: CalendarClock, label: "EVP", requiresEvp: true },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -90,6 +94,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 space-y-1 px-3">
           {navItems
             .filter((item) => !item.role || user?.role === item.role || (item.role === "rh" && user?.role === "admin"))
+            .filter((item) => !item.requiresEvp || user?.is_manager_evp)
             .map((item) => (
               <NavLink
                 key={item.to}

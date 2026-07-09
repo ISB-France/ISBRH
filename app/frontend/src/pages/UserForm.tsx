@@ -46,6 +46,11 @@ export default function UserForm() {
   const [managerSearch, setManagerSearch] = useState("");
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const [agenceInterim, setAgenceInterim] = useState("");
+  const [codeBadge, setCodeBadge] = useState("");
+  const [isManagerEvp, setIsManagerEvp] = useState(false);
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState("");
 
   // Inline creation states
   const [showNewService, setShowNewService] = useState(false);
@@ -71,6 +76,16 @@ export default function UserForm() {
     queryKey: ["users-all"],
     queryFn: () => api.get("/users/").then((r) => r.data),
   });
+
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ["me"],
+    queryFn: () => api.get("/auth/me/").then((r) => r.data),
+  });
+  // code_badge / is_manager_evp sont reserves RH/admin cote API
+  // (UserSerializer._validate_rh_only_field) — cohérent ici : un manager
+  // ne doit meme pas voir ces champs, plutot que de les afficher pour se
+  // les voir rejeter silencieusement a l'enregistrement.
+  const canEditEvpFields = currentUser?.role === "rh" || currentUser?.role === "admin";
 
   const filteredManagers = allUsers?.filter((u) => {
     const q = managerSearch.toLowerCase();
@@ -116,6 +131,10 @@ export default function UserForm() {
       setSite(d.site ?? "");
       setManager(d.manager ?? "");
       setAgenceInterim(d.agence_interim ?? "");
+      // Toujours charges (meme si non-RH), pour que le PUT resoumette la
+      // valeur existante inchangee plutot que de l'ecraser silencieusement.
+      setCodeBadge(d.code_badge ?? "");
+      setIsManagerEvp(d.is_manager_evp ?? false);
     });
   }, [id]);
 
@@ -147,6 +166,9 @@ export default function UserForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFieldErrors({});
+    setFormError("");
+
     const payload = {
       email,
       first_name: firstName,
@@ -170,13 +192,41 @@ export default function UserForm() {
       site: site || null,
       manager: manager || null,
       agence_interim: agenceInterim,
+      // Toujours envoyes (valeur existante inchangee si non-RH) — voir le
+      // commentaire au chargement des donnees.
+      code_badge: codeBadge || null,
+      is_manager_evp: isManagerEvp,
     };
-    if (isEdit) {
-      await api.put(`/users/${id}/`, payload);
-    } else {
-      await api.post("/users/", payload);
+
+    try {
+      if (isEdit) {
+        await api.put(`/users/${id}/`, payload);
+      } else {
+        await api.post("/users/", payload);
+      }
+      navigate("/users");
+    } catch (err: unknown) {
+      if (err && typeof err === "object" && "response" in err) {
+        const axiosErr = err as { response?: { data?: Record<string, string[] | string> } };
+        const data = axiosErr.response?.data;
+        if (data && typeof data === "object") {
+          const nextFieldErrors: Record<string, string> = {};
+          for (const [key, value] of Object.entries(data)) {
+            nextFieldErrors[key] = Array.isArray(value) ? value.join(" ") : String(value);
+          }
+          setFieldErrors(nextFieldErrors);
+          if (!nextFieldErrors.code_badge && !nextFieldErrors.is_manager_evp) {
+            setFormError(
+              nextFieldErrors.error ||
+                nextFieldErrors.detail ||
+                "Impossible d'enregistrer cet utilisateur."
+            );
+          }
+          return;
+        }
+      }
+      setFormError("Impossible d'enregistrer cet utilisateur.");
     }
-    navigate("/users");
   };
 
   const SelectField = ({
@@ -521,8 +571,48 @@ export default function UserForm() {
                 <Input value={agenceInterim} onChange={(e) => setAgenceInterim(e.target.value)} />
               </div>
             )}
+
+            {canEditEvpFields && (
+              <>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Code badge</label>
+                  <Input
+                    value={codeBadge}
+                    onChange={(e) => setCodeBadge(e.target.value)}
+                    placeholder="Ex: BADGE00123"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Identifiant du badge physique (doit être unique) — utilisé pour l'accès kiosque EVP.
+                  </p>
+                  {fieldErrors.code_badge && (
+                    <p className="mt-1 text-xs text-destructive">{fieldErrors.code_badge}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={isManagerEvp}
+                      onChange={(e) => setIsManagerEvp(e.target.checked)}
+                      className="h-4 w-4"
+                    />
+                    Accès EVP (manager)
+                  </label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Autorise cet utilisateur à saisir les plannings/EVP de son équipe.
+                  </p>
+                  {fieldErrors.is_manager_evp && (
+                    <p className="mt-1 text-xs text-destructive">{fieldErrors.is_manager_evp}</p>
+                  )}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
+
+        {formError && (
+          <p className="text-center text-sm text-destructive">{formError}</p>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => navigate("/users")}>
