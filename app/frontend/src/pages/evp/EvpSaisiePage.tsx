@@ -44,9 +44,16 @@ export default function EvpSaisiePage() {
     isLoading: loadingEmployees,
     isError: employeesError,
   } = useQuery<User[]>({
-    queryKey: ["employees"],
-    // Périmètre équipe EVP confirmé identique à celui des entretiens.
-    queryFn: () => api.get("/interviews/employees/").then((r) => r.data),
+    queryKey: ["employees", "direct-reports", currentUser?.id],
+    // Uniquement les N-1 directs du manager connecté (pas la hiérarchie
+    // complète) : /api/users/ est déjà scopé par UserViewSet.get_queryset
+    // aux subordonnés + soi-même pour un non-RH, et ?manager=<id> filtre
+    // ensuite strictement aux rattachements directs à ce manager.
+    // (/interviews/employees/ ne convient pas ici : il ne retourne quoi
+    // que ce soit que pour les rôles rh/admin, vide sinon.)
+    queryFn: () =>
+      api.get("/users/", { params: { manager: currentUser!.id } }).then((r) => r.data),
+    enabled: !!currentUser?.id,
   });
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
