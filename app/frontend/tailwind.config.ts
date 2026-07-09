@@ -15,34 +15,39 @@ export default {
           coral: "#F08159",
           blush: "#F8BBAB",
         },
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        // Les variables contiennent desormais une valeur de couleur complete
+        // (hsl(...), hex, ou rgba(...)) et non plus un triplet HSL nu — ceci
+        // pour permettre aux themes sombres declaratifs (palettes hex) de
+        // coexister avec les themes clairs derives par teinte (qui ecrivent
+        // eux-memes du hsl(...) complet). Ne plus re-envelopper dans hsl().
+        background: "var(--background)",
+        foreground: "var(--foreground)",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
+          DEFAULT: "var(--primary)",
+          foreground: "var(--primary-foreground)",
         },
         secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--foreground))",
+          DEFAULT: "var(--secondary)",
+          foreground: "var(--foreground)",
         },
         destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
+          DEFAULT: "var(--destructive)",
+          foreground: "var(--destructive-foreground)",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--foreground))",
+          DEFAULT: "var(--accent)",
+          foreground: "var(--foreground)",
         },
         muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "var(--muted)",
+          foreground: "var(--muted-foreground)",
         },
         card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
+          DEFAULT: "var(--card)",
+          foreground: "var(--card-foreground)",
         },
-        border: "hsl(var(--border))",
-        ring: "hsl(var(--ring))",
+        border: "var(--border)",
+        ring: "var(--ring)",
       },
       fontFamily: {
         display: ['"Plus Jakarta Sans"', "sans-serif"],

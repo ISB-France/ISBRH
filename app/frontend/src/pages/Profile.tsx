@@ -206,9 +206,15 @@ export default function Profile() {
                 >
                   <div
                     className="flex h-8 w-8 items-center justify-center rounded-md text-lg"
-                    style={{ backgroundColor: `hsl(${t.hue} 100% 12%)` }}
+                    style={{
+                      backgroundColor: t.dark ? t.palette.primary : `hsl(${t.hue} 100% 12%)`,
+                    }}
                   >
-                    <span className="opacity-90">{t.icon}</span>
+                    {t.dark ? (
+                      <t.icon className="h-4 w-4" style={{ color: t.palette.primaryForeground }} />
+                    ) : (
+                      <span className="opacity-90">{t.icon}</span>
+                    )}
                   </div>
                   <span className={`text-[10px] ${theme.id === t.id ? "text-foreground font-medium" : "text-muted-foreground"}`}>
                     {t.label}
