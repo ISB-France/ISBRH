@@ -90,9 +90,9 @@ class Interview(models.Model):
     template = models.ForeignKey(
         InterviewTemplate, null=True, blank=True, on_delete=models.SET_NULL, related_name="interviews"
     )
-    type = models.CharField(max_length=20, choices=Type.choices)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
-    due_date = models.DateField()
+    type = models.CharField(max_length=20, choices=Type.choices, db_index=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
+    due_date = models.DateField(db_index=True)
     content = models.JSONField(default=dict, blank=True)
     template_snapshot = models.JSONField(null=True, blank=True)
     document = models.FileField(upload_to="interview_docs/", null=True, blank=True)

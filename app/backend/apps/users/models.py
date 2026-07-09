@@ -78,7 +78,7 @@ class User(AbstractUser):
         SORTIE = "sortie", "Sortie"
 
     email = models.EmailField(unique=True)
-    role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE)
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE, db_index=True)
 
     # Identité
     sexe = models.CharField(max_length=20, choices=Sexe.choices, blank=True)
@@ -91,9 +91,11 @@ class User(AbstractUser):
     # Contrat
     matricule = models.CharField(max_length=50, unique=True, blank=True)
     hire_date = models.DateField(null=True, blank=True)
-    date_sortie = models.DateField(null=True, blank=True)
-    type_contrat = models.CharField(max_length=20, choices=TypeContrat.choices, blank=True)
-    statut = models.CharField(max_length=20, choices=StatutEmploye.choices, default=StatutEmploye.ACTIF)
+    date_sortie = models.DateField(null=True, blank=True, db_index=True)
+    type_contrat = models.CharField(max_length=20, choices=TypeContrat.choices, blank=True, db_index=True)
+    statut = models.CharField(
+        max_length=20, choices=StatutEmploye.choices, default=StatutEmploye.ACTIF, db_index=True
+    )
     coefficient = models.CharField(max_length=20, blank=True)
     niveau = models.CharField(max_length=50, blank=True)
     fonctionnement = models.CharField(max_length=50, blank=True)
