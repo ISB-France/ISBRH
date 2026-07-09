@@ -1,4 +1,5 @@
 from django.contrib.auth.models import AbstractUser, UserManager as BaseUserManager
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from .validators import validate_phone
@@ -132,7 +133,20 @@ class User(AbstractUser):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(role="admin") | models.Q(is_superuser=True),
+                name="role_admin_requires_superuser",
+            ),
+        ]
+
     def save(self, *args, **kwargs):
+        if self.role == self.Role.ADMIN and not self.is_superuser:
+            raise ValidationError(
+                "Le rôle admin ne peut être attribué qu'à un superutilisateur "
+                "(bootstrap ADMIN_EMAIL/ADMIN_PASSWORD ou /admin/ Django)."
+            )
         if not self.matricule:
             last = User.objects.filter(matricule__regex=r"^\d{8}$").order_by("matricule").last()
             if last:
