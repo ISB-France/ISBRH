@@ -57,7 +57,12 @@ class UserSerializer(serializers.ModelSerializer):
         return None
 
     def validate_role(self, value):
-        if value == "admin":
+        # Ne bloque que l'ESCALADE vers admin, pas la resoumission
+        # inchangee d'un compte deja admin — sinon toute modification
+        # (meme sans toucher au role) d'un utilisateur role="admin" via ce
+        # formulaire echoue, puisque le payload PUT resoumet toujours le
+        # role courant.
+        if value == "admin" and getattr(self.instance, "role", None) != "admin":
             raise serializers.ValidationError("Le rôle admin ne peut pas être attribué via ce formulaire")
         return value
 

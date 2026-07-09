@@ -204,6 +204,31 @@ class AdminRoleProtectionTests(TestCase):
         self.assertEqual(superuser.role, "admin")
         self.assertTrue(superuser.is_superuser)
 
+    def test_put_resubmitting_unchanged_admin_role_is_allowed(self):
+        # Regression : le formulaire d'edition resoumet toujours le role
+        # courant. Editer un autre champ d'un compte deja role="admin" ne
+        # doit pas echouer juste parce que le payload contient "admin".
+        admin_user = User.objects.create_superuser(
+            username="admin2@example.com",
+            email="admin2@example.com",
+            password="pass1234",
+            role="admin",
+        )
+        response = self.client.put(
+            f"/api/users/{admin_user.id}/",
+            {
+                "email": admin_user.email,
+                "first_name": "Admin",
+                "last_name": "Modifié",
+                "role": "admin",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        admin_user.refresh_from_db()
+        self.assertEqual(admin_user.last_name, "Modifié")
+        self.assertEqual(admin_user.role, "admin")
+
 
 def _csv_upload(name, content):
     return SimpleUploadedFile(name, content.encode("utf-8-sig"), content_type="text/csv")
