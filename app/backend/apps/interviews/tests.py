@@ -299,3 +299,52 @@ class ExcelExportFormulaInjectionTests(TestCase):
         cell_value = ws.cell(row=2, column=answer_col).value
         self.assertTrue(cell_value.startswith("'="))
         self.assertIn("cmd", cell_value)
+
+
+class InterviewTemplateSectionsValidationTests(TestCase):
+    """InterviewTemplate.sections doit respecter une structure minimale
+    (id/title/questions, question id/label/type) plutot que d'accepter
+    n'importe quel JSON."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def _payload(self, sections):
+        return {"name": "Template test", "type": "annual", "sections": sections}
+
+    def test_valid_sections_accepted(self):
+        response = self.client.post("/api/interview-templates/", self._payload(SECTIONS_V1), format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_section_missing_id_rejected(self):
+        sections = [{"title": "Section sans id", "questions": []}]
+        response = self.client.post("/api/interview-templates/", self._payload(sections), format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("sections", response.data)
+
+    def test_section_with_non_list_questions_rejected(self):
+        sections = [{"id": "s1", "title": "Section", "questions": "pas une liste"}]
+        response = self.client.post("/api/interview-templates/", self._payload(sections), format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("sections", response.data)
+
+    def test_question_missing_label_rejected(self):
+        sections = [{"id": "s1", "title": "Section", "questions": [{"id": "q1"}]}]
+        response = self.client.post("/api/interview-templates/", self._payload(sections), format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("sections", response.data)
+
+    def test_question_with_invalid_type_rejected(self):
+        sections = [
+            {
+                "id": "s1", "title": "Section",
+                "questions": [{"id": "q1", "label": "Q1", "type": "not-a-real-type"}],
+            }
+        ]
+        response = self.client.post("/api/interview-templates/", self._payload(sections), format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("sections", response.data)

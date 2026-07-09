@@ -4,11 +4,46 @@ from apps.users.models import Service, Site, User
 from apps.users.serializers import UserSerializer
 
 
+ALLOWED_QUESTION_TYPES = {"textarea", "rating", "yesno", "table"}
+
+
 class InterviewTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewTemplate
         fields = ["id", "name", "type", "description", "sections", "version", "created_at", "updated_at"]
         read_only_fields = ["version", "created_at", "updated_at"]
+
+    def validate_sections(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("sections doit être une liste de sections.")
+
+        for section in value:
+            if not isinstance(section, dict):
+                raise serializers.ValidationError("Chaque section doit être un objet.")
+            if not section.get("id") or not section.get("title"):
+                raise serializers.ValidationError(
+                    "Chaque section doit avoir un 'id' et un 'title'."
+                )
+
+            questions = section.get("questions", [])
+            if not isinstance(questions, list):
+                raise serializers.ValidationError(
+                    f"La section '{section['id']}' doit avoir une liste 'questions'."
+                )
+            for question in questions:
+                if not isinstance(question, dict) or not question.get("id") or not question.get("label"):
+                    raise serializers.ValidationError(
+                        f"Chaque question de la section '{section['id']}' doit avoir "
+                        "un 'id' et un 'label'."
+                    )
+                qtype = question.get("type", "textarea")
+                if qtype not in ALLOWED_QUESTION_TYPES:
+                    raise serializers.ValidationError(
+                        f"Type de question invalide dans la section '{section['id']}' : "
+                        f"'{qtype}' (autorisés : {', '.join(sorted(ALLOWED_QUESTION_TYPES))})."
+                    )
+
+        return value
 
 
 class CampaignSerializer(serializers.ModelSerializer):
