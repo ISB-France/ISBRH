@@ -17,6 +17,59 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.users.models import Augmentation, Evolution, Formation, Position, User
 
 
+class ProdSettingsSafetyTests(SimpleTestCase):
+    """DEBUG=False ne doit jamais demarrer avec une SECRET_KEY ou un
+    ALLOWED_HOSTS non explicitement configures (fallback dev dangereux)."""
+
+    def _boot_with_env(self, overrides, unset=()):
+        env = os.environ.copy()
+        for key in unset:
+            env.pop(key, None)
+        env.update(overrides)
+        env["DJANGO_SETTINGS_MODULE"] = "config.settings"
+        return subprocess.run(
+            [sys.executable, "-c", "import django; django.setup()"],
+            cwd="/app",
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_boot_fails_in_prod_without_explicit_secret_key(self):
+        result = self._boot_with_env(
+            {"DEBUG": "False", "ALLOWED_HOSTS": "isboard.example.com"},
+            unset=("DJANGO_SECRET_KEY",),
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ImproperlyConfigured", result.stderr)
+        self.assertIn("DJANGO_SECRET_KEY", result.stderr)
+
+    def test_boot_fails_in_prod_with_wildcard_allowed_hosts(self):
+        result = self._boot_with_env(
+            {"DEBUG": "False", "DJANGO_SECRET_KEY": "a-real-secret-key"},
+            unset=("ALLOWED_HOSTS",),
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ImproperlyConfigured", result.stderr)
+        self.assertIn("ALLOWED_HOSTS", result.stderr)
+
+    def test_boot_succeeds_in_prod_with_explicit_config(self):
+        result = self._boot_with_env(
+            {
+                "DEBUG": "False",
+                "DJANGO_SECRET_KEY": "a-real-secret-key",
+                "ALLOWED_HOSTS": "isboard.example.com",
+            }
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_boot_succeeds_in_dev_with_defaults(self):
+        result = self._boot_with_env(
+            {"DEBUG": "True"}, unset=("DJANGO_SECRET_KEY", "ALLOWED_HOSTS")
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
 class LogoutBlacklistsRefreshTokenTests(TestCase):
     """Le logout doit reellement invalider le refresh token (app
     token_blacklist installee), pas seulement renvoyer 204 sans effet."""
