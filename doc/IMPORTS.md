@@ -1,6 +1,6 @@
 # Imports CSV
 
-Quatre imports sont disponibles depuis la page **Utilisateurs** (réservé aux rôles RH/Admin).
+Quatre imports sont disponibles depuis la page **Utilisateurs** (réservé aux rôles RH/Admin), plus un import de modèles d'entretien depuis la page **Modèles** (réservé aux rôles RH/Admin/Manager).
 
 ---
 
@@ -135,6 +135,43 @@ Import des augmentations salariales. Chaque ligne est une augmentation. Rapproch
 ```
 Matricule,Date,Montant Augmentation
 00000001,01/01/2025,1500.00
+```
+
+---
+
+## 5. Import modèles d'entretien
+
+**Endpoint :** `POST /api/interview-templates/import_csv/`
+
+Crée des modèles d'entretien (`InterviewTemplate`) à partir d'un CSV décrivant
+leurs sections et questions. Réservé aux rôles RH/Admin/Manager. Chaque ligne
+décrit une question ; les lignes partageant `name`+`type`+`description`
+forment un même modèle, et celles partageant en plus `section_id` forment une
+même section.
+
+### Colonnes du CSV
+
+| Colonne | Description | Exemple |
+|---|---|---|
+| `name` | Nom du modèle (clé de regroupement) | `Entretien annuel` |
+| `type` | Type d'entretien (`annual`/`professional`/`bilan`/`forfait`/`fin_carriere`) | `annual` |
+| `description` | Description du modèle | `Modèle standard` |
+| `section_id` | Identifiant de section (défaut `s1`) | `s1` |
+| `section_title` | Titre de la section | `Bilan de l'année` |
+| `question_id` | Identifiant de la question | `q1` |
+| `question_label` | Libellé de la question | `Principales réalisations` |
+| `question_type` | `textarea` / `rating` / `yesno` / `table` (défaut `textarea` si absent ou invalide) | `textarea` |
+
+### Règles
+- **Clé de regroupement :** `name` + `type` + `description`
+- Une ligne sans `section_title` ni `question_label` est ignorée
+- Une ligne sans `question_id`/`question_label` renseignés ne crée que la section (pas de question)
+- Toujours en création : aucune mise à jour d'un modèle existant du même nom
+
+### Exemple de ligne
+```
+name,type,description,section_id,section_title,question_id,question_label,question_type
+Entretien annuel,annual,Modèle standard,s1,Bilan de l'année,q1,Principales réalisations,textarea
 ```
 
 ---
