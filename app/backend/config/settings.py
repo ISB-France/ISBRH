@@ -162,3 +162,10 @@ LOGGING = {
         },
     },
 }
+
+# Reverse proxy settings
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Force OIDC redirect URI
+USE_X_FORWARDED_PORT = True
