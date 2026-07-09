@@ -187,6 +187,33 @@ class Augmentation(models.Model):
         ordering = ["-date_effet"]
 
 
+class Evolution(models.Model):
+    class TypeEvolution(models.TextChoices):
+        POSTE = "poste", "Poste"
+        SERVICE = "service", "Service"
+        SITE = "site", "Site"
+        STATUT = "statut", "Statut"
+        NIVEAU = "niveau", "Niveau"
+        COEFFICIENT = "coefficient", "Coefficient"
+        SALAIRE = "salaire", "Salaire"
+
+    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name="evolutions")
+    type_evolution = models.CharField(max_length=20, choices=TypeEvolution.choices)
+    ancienne_valeur = models.CharField(max_length=255, blank=True)
+    nouvelle_valeur = models.CharField(max_length=255, blank=True)
+    date_effet = models.DateField(null=True, blank=True)
+    auteur = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="evolutions_creees"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_effet", "-created_at"]
+
+    def __str__(self):
+        return f"{self.employee} - {self.type_evolution}: {self.ancienne_valeur} -> {self.nouvelle_valeur}"
+
+
 class Notification(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
     message = models.CharField(max_length=255)

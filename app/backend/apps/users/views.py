@@ -19,8 +19,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.db import models as db_models
 
-from .models import RH_ROLES, Notification, Position, Service, Site, User
+from .models import RH_ROLES, Evolution, Notification, Position, Service, Site, User
 from .serializers import (
+    EvolutionSerializer,
     NotificationSerializer,
     PositionSerializer,
     ServiceSerializer,
@@ -151,6 +152,12 @@ class UserViewSet(viewsets.ModelViewSet):
             )
 
         return qs
+
+    @action(detail=True, methods=["get"])
+    def evolutions(self, request, pk=None):
+        user = self.get_object()
+        qs = Evolution.objects.filter(employee=user).order_by("date_effet", "created_at")
+        return Response(EvolutionSerializer(qs, many=True).data)
 
     @staticmethod
     def _parse_date(value):

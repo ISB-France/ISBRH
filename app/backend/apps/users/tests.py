@@ -180,3 +180,67 @@ class DetectDuplicateUsersCommandTests(TestCase):
         out = io.StringIO()
         call_command("detect_duplicate_users", stdout=out)
         self.assertIn("Aucun doublon potentiel", out.getvalue())
+
+
+class UserEvolutionTrackingTests(TestCase):
+    def setUp(self):
+        self.dev = Position.objects.create(name="Développeur")
+        self.lead = Position.objects.create(name="Lead développeur")
+        self.employee = User.objects.create_user(
+            username="emp1",
+            email="emp1@example.com",
+            password="pass1234",
+            role="employee",
+            position=self.dev,
+            statut="actif",
+            niveau="II",
+        )
+
+    def test_position_change_creates_evolution_with_old_and_new_value(self):
+        self.employee.position = self.lead
+        self.employee.save()
+
+        evolutions = Evolution.objects.filter(employee=self.employee, type_evolution="poste")
+        self.assertEqual(evolutions.count(), 1)
+        evolution = evolutions.first()
+        self.assertEqual(evolution.ancienne_valeur, "Développeur")
+        self.assertEqual(evolution.nouvelle_valeur, "Lead développeur")
+
+    def test_multiple_field_changes_in_one_save_creates_multiple_evolutions(self):
+        self.employee.position = self.lead
+        self.employee.statut = "inactif"
+        self.employee.niveau = "III"
+        self.employee.save()
+
+        types = set(
+            Evolution.objects.filter(employee=self.employee).values_list(
+                "type_evolution", flat=True
+            )
+        )
+        self.assertEqual(types, {"poste", "statut", "niveau"})
+
+    def test_no_change_creates_no_evolution(self):
+        self.employee.first_name = "Meme"
+        self.employee.save()
+
+        self.assertEqual(Evolution.objects.filter(employee=self.employee).count(), 0)
+
+    def test_evolutions_endpoint_returns_history_sorted_by_date(self):
+        rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        client = APIClient()
+        client.force_authenticate(user=rh_user)
+
+        self.employee.position = self.lead
+        self.employee.save()
+        self.employee.statut = "inactif"
+        self.employee.save()
+
+        response = client.get(
+            f"/api/users/{self.employee.id}/evolutions/", {"show_all_statuts": "1"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 2)
+        returned_types = {item["type_evolution"] for item in response.data}
+        self.assertEqual(returned_types, {"poste", "statut"})
