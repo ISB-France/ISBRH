@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from .models import Campaign, Interview, InterviewTemplate
 from .serializers import CampaignSerializer, InterviewSerializer, InterviewTemplateSerializer
 from apps.users.models import RH_ROLES, User
+from apps.users.validators import validate_csv_upload
 
 
 class InterviewPermission(permissions.BasePermission):
@@ -297,6 +298,9 @@ class InterviewTemplateViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Aucun fichier fourni"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         reader = csv.DictReader(io.StringIO(file.read().decode("utf-8-sig")))
         rows = list(reader)

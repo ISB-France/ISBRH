@@ -374,3 +374,58 @@ class UserEvolutionTrackingTests(TestCase):
         self.assertEqual(len(response.data), 2)
         returned_types = {item["type_evolution"] for item in response.data}
         self.assertEqual(returned_types, {"poste", "statut"})
+
+
+class CsvUploadValidationTests(TestCase):
+    """Les imports CSV doivent rejeter les fichiers trop volumineux ou d'un
+    type/extension non attendu avant de les charger en memoire."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_valid_csv_is_accepted(self):
+        csv_content = (
+            "Matricule,Nom,Prénom,Date de naissance,Date d'entrée,Statut,Niveau,Coefficient,Poste,Fonctionnement\n"
+            "00000500,DUPONT,Jean,15/03/1985,01/09/2020,actif,III,250,Développeur,\n"
+        )
+        response = self.client.post(
+            "/api/users/import_collaborateurs/",
+            {"file": _csv_upload("collab.csv", csv_content)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_non_csv_extension_rejected(self):
+        upload = SimpleUploadedFile(
+            "collab.txt", b"Matricule,Nom\n1,X\n", content_type="text/csv"
+        )
+        response = self.client.post(
+            "/api/users/import_collaborateurs/", {"file": upload}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(".csv", response.data["error"])
+
+    def test_disallowed_content_type_rejected(self):
+        upload = SimpleUploadedFile(
+            "collab.csv", b"Matricule,Nom\n1,X\n", content_type="application/x-msdownload"
+        )
+        response = self.client.post(
+            "/api/users/import_collaborateurs/", {"file": upload}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Type de fichier", response.data["error"])
+
+    def test_oversized_file_rejected(self):
+        from apps.users.validators import MAX_CSV_UPLOAD_SIZE
+
+        oversized_content = b"a" * (MAX_CSV_UPLOAD_SIZE + 1)
+        upload = SimpleUploadedFile("collab.csv", oversized_content, content_type="text/csv")
+        response = self.client.post(
+            "/api/users/import_collaborateurs/", {"file": upload}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("volumineux", response.data["error"])

@@ -22,6 +22,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.db import models as db_models
 
 from .models import RH_ROLES, Evolution, Notification, Position, Service, Site, User
+from .validators import validate_csv_upload
 from .serializers import (
     EvolutionSerializer,
     NotificationSerializer,
@@ -181,6 +182,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -260,6 +264,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         from .models import Formation
         import csv
@@ -316,6 +323,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         from .models import Augmentation
         import csv, io
@@ -371,6 +381,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -465,6 +478,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
