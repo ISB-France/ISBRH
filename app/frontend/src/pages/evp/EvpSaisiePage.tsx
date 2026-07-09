@@ -34,7 +34,7 @@ export default function EvpSaisiePage() {
 
   useInactivityLogout(INACTIVITY_TIMEOUT_MS, () => logoutToBadgeScan(navigate));
 
-  const { data: currentUser, isLoading: loadingUser } = useQuery<User>({
+  const { data: currentUser } = useQuery<User>({
     queryKey: ["me"],
     queryFn: () => api.get("/auth/me/").then((r) => r.data),
   });
@@ -155,21 +155,6 @@ export default function EvpSaisiePage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-white p-4">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Connecté en tant que
-            </p>
-            <p className="text-lg font-semibold text-primary">
-              {loadingUser
-                ? "…"
-                : currentUser
-                ? `${currentUser.first_name} ${currentUser.last_name}`
-                : "Utilisateur inconnu"}
-            </p>
-          </div>
-        </div>
-
         {currentUser && !currentUser.is_manager_evp && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-destructive">
             Ce compte n'a pas les droits manager EVP nécessaires pour accéder à la saisie.
