@@ -73,7 +73,13 @@ export async function corrigerJourTravaille(
   jourId: number,
   correction: JourTravailleCorrection,
 ): Promise<JourTravaille> {
-  const res = await api.patch(`/evp/jours-travailles/${jourId}/`, correction);
+  // Le backend attend "motif_modification" (nom exact du champ modèle) —
+  // "motif" ici est juste plus court à manier côté composant.
+  const { motif, ...rest } = correction;
+  const res = await api.patch(`/evp/jours-travailles/${jourId}/`, {
+    ...rest,
+    motif_modification: motif,
+  });
   return res.data;
 }
 
