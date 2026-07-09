@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "mozilla_django_oidc",
     "apps.users",
     "apps.interviews",
+    "apps.evp",
 ]
 
 MIDDLEWARE = [
