@@ -186,3 +186,54 @@ class CampaignPopulationFilterValidationTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Aucun collaborateur", response.data.get("error", ""))
         self.assertEqual(Interview.objects.filter(campaign=campaign).count(), 0)
+
+
+class InterviewManagerDeletionTests(TestCase):
+    """Supprimer le manager d'un entretien ne doit plus supprimer
+    l'entretien en cascade : le manager doit passer a null."""
+
+    def test_deleting_manager_sets_interview_manager_to_null_instead_of_deleting_it(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager,
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=manager,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+
+        manager.delete()
+
+        interview.refresh_from_db()
+        self.assertIsNone(interview.manager_id)
+        self.assertTrue(Interview.objects.filter(pk=interview.pk).exists())
+
+
+class InterviewEmployeeDeletionTests(TestCase):
+    """Un employe ayant un historique d'entretiens ne doit pas pouvoir etre
+    supprime silencieusement (PROTECT) : la suppression doit echouer
+    explicitement plutot que de detruire l'historique en cascade."""
+
+    def test_deleting_employee_with_interview_history_is_blocked(self):
+        from django.db.models import ProtectedError
+
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager,
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=manager,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+
+        with self.assertRaises(ProtectedError):
+            employee.delete()
+
+        self.assertTrue(Interview.objects.filter(pk=interview.pk).exists())
+        self.assertTrue(User.objects.filter(pk=employee.pk).exists())

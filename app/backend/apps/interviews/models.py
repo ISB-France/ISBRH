@@ -74,12 +74,14 @@ class Interview(models.Model):
 
     employee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="interviews",
     )
     manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="managed_interviews",
     )
     campaign = models.ForeignKey(
