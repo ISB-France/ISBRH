@@ -155,7 +155,7 @@ export default function EvpSaisiePage() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white p-4">
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-white p-4">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
               Connecté en tant que
@@ -168,9 +168,6 @@ export default function EvpSaisiePage() {
                 : "Utilisateur inconnu"}
             </p>
           </div>
-          <Button variant="outline" onClick={() => logoutToBadgeScan(navigate)}>
-            Déconnexion / Changer de manager
-          </Button>
         </div>
 
         {currentUser && !currentUser.is_manager_evp && (
