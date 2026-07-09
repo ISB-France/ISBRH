@@ -5,6 +5,7 @@ from django.shortcuts import redirect
 from django.utils.crypto import get_random_string
 import csv
 import io
+import logging
 
 from mozilla_django_oidc.utils import add_state_and_verifier_and_nonce_to_session
 from mozilla_django_oidc.views import OIDCAuthenticationRequestView as BaseRequestView
@@ -27,6 +28,8 @@ from .serializers import (
     UserMeSerializer,
     UserSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_subordinate_ids(user_id):
@@ -411,6 +414,12 @@ class UserViewSet(viewsets.ModelViewSet):
                     },
                 )
                 if created_flag:
+                    logger.warning(
+                        "Aucun utilisateur trouvé pour le matricule %s, "
+                        "création avec email temporaire (%s)",
+                        matricule,
+                        user.email,
+                    )
                     user.set_unusable_password()
                     user.save()
                     created += 1

@@ -73,3 +73,110 @@ class AdminRoleProtectionTests(TestCase):
         )
         self.assertEqual(superuser.role, "admin")
         self.assertTrue(superuser.is_superuser)
+
+
+def _csv_upload(name, content):
+    return SimpleUploadedFile(name, content.encode("utf-8-sig"), content_type="text/csv")
+
+
+class ImportDeduplicationTests(TestCase):
+    """L'import collaborateurs sur un matricule deja cree par l'import Kostango
+    doit mettre a jour le compte existant, pas en creer un second."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_import_collaborateurs_after_kostango_same_matricule_updates_not_duplicates(self):
+        kostango_csv = (
+            "personne email,Prénom,Nom,Matricule,Date de naissance\n"
+            "jean.dupont@isb.fr,Jean,DUPONT,00000123,15/03/1985\n"
+        )
+        response = self.client.post(
+            "/api/users/import_kostango/",
+            {"file": _csv_upload("kostango.csv", kostango_csv)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["created"], 1)
+        self.assertEqual(User.objects.filter(matricule="00000123").count(), 1)
+
+        collaborateurs_csv = (
+            "Matricule,Nom,Prénom,Date de naissance,Date d'entrée,Statut,Niveau,Coefficient,Poste,Fonctionnement\n"
+            "00000123,DUPONT,Jean,15/03/1985,01/09/2020,actif,III,250,Développeur,Forfait jour\n"
+        )
+        response = self.client.post(
+            "/api/users/import_collaborateurs/",
+            {"file": _csv_upload("collaborateurs.csv", collaborateurs_csv)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["created"], 0)
+        self.assertEqual(response.data["updated"], 1)
+
+        self.assertEqual(User.objects.filter(matricule="00000123").count(), 1)
+        jean = User.objects.get(matricule="00000123")
+        self.assertEqual(jean.email, "jean.dupont@isb.fr")
+        self.assertEqual(jean.niveau, "III")
+
+    def test_import_collaborateurs_unknown_matricule_creates_temp_email_user(self):
+        collaborateurs_csv = (
+            "Matricule,Nom,Prénom,Date de naissance,Date d'entrée,Statut,Niveau,Coefficient,Poste,Fonctionnement\n"
+            "00000999,MARTIN,Alice,10/05/1990,01/01/2021,actif,II,200,Comptable,\n"
+        )
+        response = self.client.post(
+            "/api/users/import_collaborateurs/",
+            {"file": _csv_upload("collaborateurs.csv", collaborateurs_csv)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["created"], 1)
+        alice = User.objects.get(matricule="00000999")
+        self.assertEqual(alice.email, "00000999@collaborateur.isb.fr")
+
+
+class DetectDuplicateUsersCommandTests(TestCase):
+    def test_detects_simulated_duplicate(self):
+        User.objects.create_user(
+            username="jean.dupont@isb.fr",
+            email="jean.dupont@isb.fr",
+            password="pass1234",
+            first_name="Jean",
+            last_name="DUPONT",
+            date_naissance=datetime.date(1985, 3, 15),
+            matricule="00000123",
+        )
+        User.objects.create_user(
+            username="collab_00000456",
+            email="00000456@collaborateur.isb.fr",
+            password="pass1234",
+            first_name="Jean",
+            last_name="DUPONT",
+            date_naissance=datetime.date(1985, 3, 15),
+            matricule="00000456",
+        )
+
+        out = io.StringIO()
+        call_command("detect_duplicate_users", stdout=out)
+        output = out.getvalue()
+
+        self.assertIn("Doublon potentiel", output)
+        self.assertIn("00000123", output)
+        self.assertIn("00000456", output)
+        self.assertIn("[email temporaire]", output)
+
+    def test_no_duplicates_reports_clean(self):
+        User.objects.create_user(
+            username="solo@isb.fr",
+            email="solo@isb.fr",
+            password="pass1234",
+            first_name="Solo",
+            last_name="UNIQUE",
+            date_naissance=datetime.date(1990, 1, 1),
+        )
+        out = io.StringIO()
+        call_command("detect_duplicate_users", stdout=out)
+        self.assertIn("Aucun doublon potentiel", out.getvalue())
