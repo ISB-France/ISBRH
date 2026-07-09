@@ -14,6 +14,7 @@ from mozilla_django_oidc.views import OIDCAuthenticationCallbackView as BaseCall
 from rest_framework import filters, generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -858,10 +859,18 @@ class SSOLoginView(APIView):
         })
 
 
+class DevLoginThrottle(AnonRateThrottle):
+    scope = "dev_login"
+
+
 class DevLoginView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_classes = [DevLoginThrottle]
 
     def post(self, request):
+        if not settings.DEBUG:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
         from django.contrib.auth import authenticate
 
         email = request.data.get("email", "").strip().lower()

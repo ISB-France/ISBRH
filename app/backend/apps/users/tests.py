@@ -48,6 +48,52 @@ class LogoutBlacklistsRefreshTokenTests(TestCase):
         self.assertEqual(response.status_code, 204)
 
 
+class DevLoginViewTests(TestCase):
+    """DevLoginView doit rester utilisable en dev (DEBUG=True) mais etre
+    totalement inaccessible en production (DEBUG=False), et limiter le
+    nombre de tentatives pour reduire la surface de brute-force."""
+
+    def setUp(self):
+        from django.core.cache import cache as default_cache
+
+        default_cache.clear()
+        self.user = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+        self.client = APIClient()
+
+    def test_dev_login_works_when_debug_true(self):
+        with override_settings(DEBUG=True):
+            response = self.client.post(
+                "/api/auth/dev-login/",
+                {"email": "emp1@example.com", "password": "pass1234"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+
+    def test_dev_login_disabled_when_debug_false(self):
+        with override_settings(DEBUG=False):
+            response = self.client.post(
+                "/api/auth/dev-login/",
+                {"email": "emp1@example.com", "password": "pass1234"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_dev_login_is_rate_limited(self):
+        # DRF fige SimpleRateThrottle.THROTTLE_RATES a l'import du module, donc
+        # on utilise le taux reellement configure en settings (5/min) plutot
+        # que d'essayer de le surcharger dynamiquement via override_settings.
+        with override_settings(DEBUG=True):
+            payload = {"email": "emp1@example.com", "password": "wrong-password"}
+            responses = [
+                self.client.post("/api/auth/dev-login/", payload, format="json")
+                for _ in range(6)
+            ]
+        self.assertEqual(responses[-1].status_code, 429)
+
+
 class AdminRoleProtectionTests(TestCase):
     """Le role "admin" ne doit jamais pouvoir etre attribue via l'API, le
     formulaire, ou une modification directe en base qui contournerait le
