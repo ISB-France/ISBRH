@@ -15,6 +15,8 @@ import Users from "./pages/Users";
 import UserForm from "./pages/UserForm";
 import Profile from "./pages/Profile";
 import ThemeSync from "./components/ThemeSync";
+import BadgeScanPage from "./pages/evp/BadgeScanPage";
+import EvpSaisiePage from "./pages/evp/EvpSaisiePage";
 
 function App() {
   const token = localStorage.getItem("access_token");
@@ -35,6 +37,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/auth/sso" element={<SSOCallback />} />
+        <Route path="/evp/badge" element={<BadgeScanPage />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     );
@@ -60,6 +63,8 @@ function App() {
       <Route path="/users/new" element={<UserForm />} />
       <Route path="/users/:id/edit" element={<UserForm />} />
       <Route path="/profile" element={<Profile />} />
+      <Route path="/evp/badge" element={<BadgeScanPage />} />
+      <Route path="/evp/saisie" element={<EvpSaisiePage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
     </>
