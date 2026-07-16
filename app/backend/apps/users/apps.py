@@ -32,6 +32,7 @@ class UsersConfig(AppConfig):
         from django.db.models.signals import pre_save
 
         from .models import User
-        from .signals import track_user_evolution
+        from .signals import reassign_interviews_on_manager_change, track_user_evolution
 
         pre_save.connect(track_user_evolution, sender=User)
+        pre_save.connect(reassign_interviews_on_manager_change, sender=User)

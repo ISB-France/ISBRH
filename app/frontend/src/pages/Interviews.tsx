@@ -46,6 +46,7 @@ export default function Interviews() {
   const [type, setType] = useState("");
   const [scope, setScope] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [year, setYear] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -89,9 +90,19 @@ export default function Interviews() {
       }).then((r) => r.data),
   });
 
+  const availableYears = useMemo(() => {
+    if (!interviews) return [];
+    const years = new Set(interviews.map((iv) => iv.due_date.slice(0, 4)));
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [interviews]);
+
   const displayed = useMemo(() => {
-    if (!interviews || !sortField) return interviews;
-    return [...interviews].sort((a, b) => {
+    if (!interviews) return interviews;
+    const filtered = showHistory && year
+      ? interviews.filter((iv) => iv.due_date.slice(0, 4) === year)
+      : interviews;
+    if (!sortField) return filtered;
+    return [...filtered].sort((a, b) => {
       let cmp = 0;
       if (sortField === "employee") {
         const aName = `${a.employee_detail?.first_name ?? ""} ${a.employee_detail?.last_name ?? ""}`.trim();
@@ -102,7 +113,7 @@ export default function Interviews() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [interviews, sortField, sortDir]);
+  }, [interviews, sortField, sortDir, showHistory, year]);
 
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les entretiens" onRetry={refetch} />;
@@ -157,6 +168,18 @@ export default function Interviews() {
             Historique
           </button>
         </div>
+        {showHistory && (
+          <select
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+          >
+            <option value="">Toutes les années</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        )}
         {selectedIds.length > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setShowBulkDeleteConfirm(true)}>
             <Trash2 className="mr-1 h-4 w-4" />

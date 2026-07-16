@@ -52,3 +52,26 @@ def track_user_evolution(sender, instance, **kwargs):
             nouvelle_valeur=_display_value(instance, field),
             date_effet=today,
         )
+
+
+def reassign_interviews_on_manager_change(sender, instance, **kwargs):
+    """Quand le manager (N+1) d'un employe change, resynchronise le champ
+    Interview.manager de tous ses entretiens sur le nouveau manager, pour que
+    l'ancien manager perde immediatement l'acces (lecture/ecriture) et que le
+    nouveau l'obtienne — sans dependre d'une action manuelle."""
+    if not instance.pk:
+        return
+
+    try:
+        old = sender.objects.get(pk=instance.pk)
+    except sender.DoesNotExist:
+        return
+
+    if old.manager_id == instance.manager_id:
+        return
+
+    from apps.interviews.models import Interview
+
+    Interview.objects.filter(employee_id=instance.pk).exclude(
+        manager_id=instance.manager_id
+    ).update(manager_id=instance.manager_id)

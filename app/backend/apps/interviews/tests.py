@@ -214,6 +214,73 @@ class InterviewManagerDeletionTests(TestCase):
         self.assertTrue(Interview.objects.filter(pk=interview.pk).exists())
 
 
+class InterviewManagerReassignmentTests(TestCase):
+    """Changer le manager (N+1) d'un employe doit resynchroniser
+    automatiquement le champ Interview.manager de ses entretiens, pour que
+    l'ancien manager perde l'acces et que le nouveau l'obtienne sans action
+    manuelle (cf. reassign_managers, qui reste un rattrapage explicite)."""
+
+    def test_changing_employee_manager_reassigns_existing_interviews(self):
+        old_manager = User.objects.create_user(
+            username="mgr_old", email="mgr_old@example.com", password="pass1234", role="manager"
+        )
+        new_manager = User.objects.create_user(
+            username="mgr_new", email="mgr_new@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=old_manager,
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=old_manager,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+
+        employee.manager = new_manager
+        employee.save()
+
+        interview.refresh_from_db()
+        self.assertEqual(interview.manager_id, new_manager.id)
+
+    def test_removing_employee_manager_clears_interview_manager(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager,
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=manager,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+
+        employee.manager = None
+        employee.save()
+
+        interview.refresh_from_db()
+        self.assertIsNone(interview.manager_id)
+
+    def test_unrelated_user_field_change_does_not_touch_interview_manager(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager,
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=manager,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+
+        employee.telephone = "0600000000"
+        employee.save()
+
+        interview.refresh_from_db()
+        self.assertEqual(interview.manager_id, manager.id)
+
+
 class InterviewEmployeeDeletionTests(TestCase):
     """Un employe ayant un historique d'entretiens ne doit pas pouvoir etre
     supprime silencieusement (PROTECT) : la suppression doit echouer
