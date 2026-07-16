@@ -230,6 +230,45 @@ class AdminRoleProtectionTests(TestCase):
         self.assertEqual(admin_user.role, "admin")
 
 
+class PromoteToAdminTests(TestCase):
+    """Seul un admin existant peut promouvoir un autre compte au role admin,
+    via l'action dediee (le formulaire/serializer standard refuse toujours
+    ce role, voir AdminRoleProtectionTests)."""
+
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="admin1@example.com", email="admin1@example.com",
+            password="pass1234", role="admin",
+        )
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.target = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+        self.client = APIClient()
+
+    def test_admin_can_promote_user(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post(f"/api/users/{self.target.id}/promote_to_admin/")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.role, "admin")
+        self.assertTrue(self.target.is_superuser)
+
+    def test_rh_cannot_promote_user(self):
+        self.client.force_authenticate(user=self.rh_user)
+        response = self.client.post(f"/api/users/{self.target.id}/promote_to_admin/")
+        self.assertEqual(response.status_code, 403)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.role, "employee")
+
+    def test_promoting_already_admin_is_rejected(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.post(f"/api/users/{self.admin_user.id}/promote_to_admin/")
+        self.assertEqual(response.status_code, 400)
+
+
 def _csv_upload(name, content):
     return SimpleUploadedFile(name, content.encode("utf-8-sig"), content_type="text/csv")
 

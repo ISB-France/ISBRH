@@ -36,6 +36,7 @@ export default function UserForm() {
   const [forfaitJour, setForfaitJour] = useState(false);
   const [ticketsRestaurant, setTicketsRestaurant] = useState(false);
   const [cadre, setCadre] = useState(false);
+  const [categorieSocioPro, setCategorieSocioPro] = useState("");
 
   // Organisation
   const [role, setRole] = useState("employee");
@@ -113,6 +114,7 @@ export default function UserForm() {
       setForfaitJour(d.forfait_jour ?? false);
       setTicketsRestaurant(d.tickets_restaurant ?? false);
       setCadre(d.cadre ?? false);
+      setCategorieSocioPro(d.categorie_socio_pro ?? "");
 
       setRole(d.role);
       setService(d.service ?? "");
@@ -187,6 +189,7 @@ export default function UserForm() {
       forfait_jour: forfaitJour,
       tickets_restaurant: ticketsRestaurant,
       cadre,
+      categorie_socio_pro: categorieSocioPro,
       role,
       service: service || null,
       position: position || null,
@@ -446,6 +449,19 @@ export default function UserForm() {
             <div>
               <label className="mb-1.5 block text-sm font-medium">Salaire brut mensuel</label>
               <Input type="number" step="0.01" value={salaireBrut} onChange={(e) => setSalaireBrut(e.target.value)} placeholder="0.00" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Catégorie socio-professionnelle</label>
+              <select
+                value={categorieSocioPro}
+                onChange={(e) => setCategorieSocioPro(e.target.value)}
+                className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
+              >
+                <option value="">—</option>
+                <option value="ouvrier">Ouvrier</option>
+                <option value="agent_maitrise">Agent de maîtrise</option>
+                <option value="cadre">Cadre</option>
+              </select>
             </div>
             <div className="flex flex-wrap gap-6">
               <label className="flex items-center gap-2 text-sm">

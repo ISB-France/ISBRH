@@ -39,6 +39,7 @@ export interface User {
   forfait_jour: boolean;
   tickets_restaurant: boolean;
   cadre: boolean;
+  categorie_socio_pro: "" | "ouvrier" | "agent_maitrise" | "cadre";
 
   // Organisation
   service: number | null;
