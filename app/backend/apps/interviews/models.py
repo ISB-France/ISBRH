@@ -93,6 +93,10 @@ class Interview(models.Model):
     type = models.CharField(max_length=20, choices=Type.choices, db_index=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
     due_date = models.DateField(db_index=True)
+    # Date a laquelle l'entretien a effectivement eu lieu — distincte de
+    # due_date (echeance/date limite). Renseignee au moment de la
+    # realisation, pas a la creation de l'entretien.
+    date_realisation = models.DateField(null=True, blank=True)
     content = models.JSONField(default=dict, blank=True)
     template_snapshot = models.JSONField(null=True, blank=True)
     document = models.FileField(upload_to="interview_docs/", null=True, blank=True)

@@ -6,6 +6,7 @@ from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
 from apps.interviews.models import Campaign, Interview, InterviewTemplate
+from apps.interviews.templates import ANNUAL_TEMPLATE
 from apps.users.models import Site, User
 
 
@@ -212,6 +213,67 @@ class InterviewManagerDeletionTests(TestCase):
         interview.refresh_from_db()
         self.assertIsNone(interview.manager_id)
         self.assertTrue(Interview.objects.filter(pk=interview.pk).exists())
+
+
+class PreviousYearObjectivesBilanTests(TestCase):
+    """A la creation d'un nouvel entretien annuel, les objectifs et
+    competences fixes lors de l'entretien annuel precedent (complete/signe)
+    doivent etre repris dans des sections de bilan a evaluer."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.rh_user,
+        )
+        self.template = InterviewTemplate.objects.create(
+            name="Annuel", type="annual", sections=ANNUAL_TEMPLATE["sections"],
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_new_annual_interview_carries_forward_previous_objectives(self):
+        previous = Interview.objects.create(
+            employee=self.employee, manager=self.rh_user, type="annual",
+            status="completed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": ANNUAL_TEMPLATE["sections"]},
+        )
+        content = previous.content
+        for section in content["sections"]:
+            if section["id"] == "objectifs":
+                for q in section["questions"]:
+                    q["answer"] = f"objectif rempli {q['id']}"
+        previous.content = content
+        previous.save()
+
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        new_interview = Interview.objects.get(pk=response.data["id"])
+        sections_by_id = {s["id"]: s for s in new_interview.content["sections"]}
+        self.assertIn("bilan_objectifs_precedents", sections_by_id)
+        bilan_questions = sections_by_id["bilan_objectifs_precedents"]["questions"]
+        self.assertTrue(all(q["type"] == "objectif_bilan" for q in bilan_questions))
+        self.assertTrue(all(q["objectif_texte"].startswith("objectif rempli") for q in bilan_questions))
+        self.assertNotIn("bilan_competences_precedentes", sections_by_id)
+
+    def test_first_annual_interview_has_no_bilan_section(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        section_ids = [s["id"] for s in interview.content["sections"]]
+        self.assertNotIn("bilan_objectifs_precedents", section_ids)
 
 
 class PrintTemplateTests(TestCase):

@@ -10,7 +10,7 @@ import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import { Toast, useToast } from "../components/Toast";
 import api from "../api";
-import type { Interview, User, Section } from "../types";
+import type { Interview, User, Section, ObjectifBilanAnswer } from "../types";
 import { formatDate } from "../lib/utils";
 
 const statusLabel: Record<string, string> = {
@@ -26,6 +26,7 @@ export default function InterviewDetail() {
   const navigate = useNavigate();
   const [interview, setInterview] = useState<Interview | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
+  const [dateRealisation, setDateRealisation] = useState("");
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { toast, show, setToast } = useToast();
@@ -40,10 +41,11 @@ export default function InterviewDetail() {
     api.get(`/interviews/${id}/`).then((r) => {
       setInterview(r.data);
       setSections(r.data.content?.sections || []);
+      setDateRealisation(r.data.date_realisation || "");
     });
   }, [id]);
 
-  const updateAnswer = (sIdx: number, qIdx: number, value: string | number | boolean | null) => {
+  const updateAnswer = (sIdx: number, qIdx: number, value: string | number | boolean | null | ObjectifBilanAnswer) => {
     setSections((prev) => {
       const next = [...prev];
       const qs = [...next[sIdx].questions];
@@ -95,7 +97,10 @@ export default function InterviewDetail() {
     if (!interview) return;
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = { content: { ...interview.content, sections, lieu: interview.employee_detail?.site_name || "" } };
+      const payload: Record<string, unknown> = {
+        content: { ...interview.content, sections, lieu: interview.employee_detail?.site_name || "" },
+        date_realisation: dateRealisation || null,
+      };
       if (newStatus) {
         payload.status = newStatus;
       } else if (interview.status === "draft") {
@@ -134,7 +139,7 @@ export default function InterviewDetail() {
   const canEdit = currentUser?.role === "admin" || currentUser?.role === "rh" || interview.manager === currentUser?.id || (isOwn && hasNoManager) || (currentUser?.role === "manager" && !isOwn);
   const isReadOnly = !canEdit || interview.status === "completed" || interview.status === "signed" || interview.status === "cancelled";
 
-  const prevAnswers = new Map<string, string | number | boolean | (string | number | null)[][] | null>();
+  const prevAnswers = new Map<string, string | number | boolean | (string | number | null)[][] | ObjectifBilanAnswer | null>();
   for (const section of interview.previous_content || []) {
     for (const q of section.questions) {
       if (q.answer !== undefined) prevAnswers.set(q.id, q.answer);
@@ -163,6 +168,16 @@ export default function InterviewDetail() {
             {" · "}
             Date limite : {formatDate(interview.due_date)}
           </p>
+          <div className="mt-2 flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">Date de réalisation :</label>
+            <input
+              type="date"
+              value={dateRealisation}
+              onChange={(e) => setDateRealisation(e.target.value)}
+              disabled={isReadOnly}
+              className="h-8 rounded-md border border-border bg-white px-2 text-sm"
+            />
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {!isReadOnly && (
@@ -478,6 +493,45 @@ export default function InterviewDetail() {
                     </p>
                   )}
                   </>
+                )}
+                {q.type === "objectif_bilan" && (
+                  <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                    <p className="text-sm italic text-muted-foreground">Objectif fixé : {q.objectif_texte || "—"}</p>
+                    <div className="flex gap-2">
+                      {([
+                        { value: "atteint", label: "Atteint" },
+                        { value: "partiel", label: "Partiellement atteint" },
+                        { value: "non_atteint", label: "Non atteint" },
+                      ] as const).map((opt) => {
+                        const current = q.answer as ObjectifBilanAnswer | undefined;
+                        return (
+                          <Button
+                            key={opt.value}
+                            type="button"
+                            size="sm"
+                            variant={current?.statut === opt.value ? "default" : "outline"}
+                            disabled={isReadOnly}
+                            onClick={() =>
+                              !isReadOnly &&
+                              updateAnswer(sIdx, qIdx, { statut: opt.value, commentaire: current?.commentaire || "" })
+                            }
+                          >
+                            {opt.label}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    <Textarea
+                      rows={2}
+                      placeholder="Commentaire"
+                      value={(q.answer as ObjectifBilanAnswer | undefined)?.commentaire || ""}
+                      onChange={(e) => {
+                        const current = q.answer as ObjectifBilanAnswer | undefined;
+                        updateAnswer(sIdx, qIdx, { statut: current?.statut || "", commentaire: e.target.value });
+                      }}
+                      disabled={isReadOnly}
+                    />
+                  </div>
                 )}
                 {q.type === "table" && q.columns && q.columns.length > 0 && (
                   <>

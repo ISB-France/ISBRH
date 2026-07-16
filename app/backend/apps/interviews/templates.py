@@ -20,7 +20,7 @@ ANNUAL_TEMPLATE = {
         },
         {
             "id": "objectifs",
-            "title": "Objectifs pour l'année à venir",
+            "title": "Nouveaux objectifs pour l'année à venir",
             "questions": [
                 {"id": "objectifs_metier", "label": "Objectifs métier", "type": "textarea", "answer": ""},
                 {"id": "objectifs_personnels", "label": "Objectifs de développement personnel", "type": "textarea", "answer": ""},

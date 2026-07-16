@@ -114,7 +114,7 @@ class InterviewSerializer(serializers.ModelSerializer):
             "manager", "manager_detail",
             "campaign", "template", "template_name", "template_sections",
             "employee_manager_name", "employee_manager_id",
-            "type", "status", "due_date", "content",
+            "type", "status", "due_date", "date_realisation", "content",
             "document_url",
             "previous_content",
             "career",
