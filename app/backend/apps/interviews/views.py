@@ -194,7 +194,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 iv.id,
                 iv.employee.get_full_name() or iv.employee.email,
                 iv.employee.email,
-                iv.manager.get_full_name() or iv.manager.email,
+                (iv.manager.get_full_name() or iv.manager.email) if iv.manager else "",
                 iv.get_type_display(),
                 iv.get_status_display(),
                 iv.due_date,
@@ -246,7 +246,21 @@ class InterviewViewSet(viewsets.ModelViewSet):
             "career": career,
             "training_history": training_history,
             "salary_history": salary_chrono,
+            "logo_data_uri": self._get_logo_data_uri(),
         }
+
+    _logo_data_uri_cache = None
+
+    @classmethod
+    def _get_logo_data_uri(cls):
+        if cls._logo_data_uri_cache is None:
+            import base64
+            import os
+
+            logo_path = os.path.join(os.path.dirname(__file__), "static", "interviews", "logo.png")
+            with open(logo_path, "rb") as f:
+                cls._logo_data_uri_cache = "data:image/png;base64," + base64.b64encode(f.read()).decode("ascii")
+        return cls._logo_data_uri_cache
 
     @action(detail=True, methods=["get"])
     def print(self, request, pk=None):
@@ -645,7 +659,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                     emp.site.name if emp.site else "",
                     emp.service.name if emp.service else "",
                     emp.position.name if emp.position else "",
-                    iv.manager.get_full_name() or iv.manager.email,
+                    (iv.manager.get_full_name() or iv.manager.email) if iv.manager else "",
                     iv.get_status_display(),
                     str(iv.due_date),
                 ]

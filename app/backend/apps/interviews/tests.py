@@ -214,6 +214,42 @@ class InterviewManagerDeletionTests(TestCase):
         self.assertTrue(Interview.objects.filter(pk=interview.pk).exists())
 
 
+class PrintTemplateTests(TestCase):
+    """Le titre imprime doit refleter le type reel de l'entretien, un logo
+    doit etre present, et les blocs d'historique doivent apparaitre pour un
+    entretien de type bilan avec de l'historique disponible."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager,
+        )
+        self.client = APIClient()
+
+    def test_print_title_matches_interview_type_for_bilan(self):
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="professional",
+            status="completed", due_date=datetime.date(2026, 1, 1),
+            content={"employee_snapshot": {"salaire_brut": "2500"}},
+        )
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="bilan",
+            due_date=datetime.date(2026, 12, 31), content={},
+        )
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.get(f"/api/interviews/{interview.id}/print/")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn("ENTRETIEN DE BILAN", html.upper())
+        self.assertNotIn("ENTRETIEN D'ÉVALUATION", html.upper())
+        self.assertIn('<img class="logo"', html)
+        self.assertIn("Parcours professionnel", html)
+        self.assertIn("Historique des entretiens", html)
+
+
 class InterviewManagerReassignmentTests(TestCase):
     """Changer le manager (N+1) d'un employe doit resynchroniser
     automatiquement le champ Interview.manager de ses entretiens, pour que

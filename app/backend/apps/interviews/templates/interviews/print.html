@@ -8,6 +8,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { margin: 2cm; font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10pt; color: #1a1a1a; line-height: 1.5; }
 
+    .logo { display: block; margin: 0 auto 10pt; height: 40pt; }
     h1 { font-size: 20pt; text-align: center; color: #1a1a1a; margin-bottom: 2pt; letter-spacing: 1pt; }
     .subtitle { text-align: center; color: #666; font-size: 9pt; margin-bottom: 24pt; }
 
@@ -63,7 +64,8 @@
   <button onclick="window.close()">Fermer</button>
 </div>
 
-<h1>ENTRETIEN D'ÉVALUATION</h1>
+{% if logo_data_uri %}<img class="logo" src="{{ logo_data_uri }}" alt="ISB">{% endif %}
+<h1>{{ interview.get_type_display|upper }}</h1>
 <p class="subtitle">ISB France — {% now "d/m/Y" %}</p>
 
 <div class="section">
@@ -103,7 +105,7 @@
   </div>
 </div>
 
-{% if career %}
+{% if interview.type == "professional" or interview.type == "bilan" %}{% if career %}
 <div class="section">
   <h2>Parcours professionnel</h2>
   <table style="width:100%; border-collapse: collapse; font-size: 9pt;">
@@ -123,9 +125,9 @@
     {% endfor %}
   </table>
 </div>
-{% endif %}
+{% endif %}{% endif %}
 
-{% if history and interview.type != "professional" %}
+{% if interview.type == "annual" or interview.type == "bilan" %}{% if history %}
 <div class="section">
   <h2>Historique des entretiens</h2>
   <table style="width:100%; border-collapse: collapse; font-size: 9pt;">
@@ -145,7 +147,7 @@
     {% endfor %}
   </table>
 </div>
-{% endif %}
+{% endif %}{% endif %}
 
 {% if interview.type == "bilan" and training_history %}
 <div class="section">
