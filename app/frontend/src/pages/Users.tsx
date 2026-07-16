@@ -19,7 +19,7 @@ const roleLabel: Record<string, string> = {
   admin: "Admin",
   rh: "RH",
   manager: "Manager",
-  employee: "Employé",
+  employee: "Collaborateur",
   stagiaire: "Stagiaire",
   alternant: "Alternant",
 };

@@ -489,7 +489,7 @@ export default function UserForm() {
             <SelectField label="Rôle applicatif" value={role} onChange={setRole} options={[
               { value: "rh", label: "RH" },
               { value: "manager", label: "Manager" },
-              { value: "employee", label: "Employé" },
+              { value: "employee", label: "Collaborateur" },
               { value: "stagiaire", label: "Stagiaire" },
               { value: "alternant", label: "Alternant" },
             ]} />

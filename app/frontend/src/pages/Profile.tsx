@@ -139,7 +139,7 @@ export default function Profile() {
                 <p className="text-sm text-muted-foreground">{user.email}</p>
                 <div className="mt-1 flex items-center justify-center gap-2">
                   <Badge variant="secondary">
-                    {{ admin: "Admin", rh: "RH", manager: "Manager", employee: "Employé", stagiaire: "Stagiaire", alternant: "Alternant" }[user.role] || user.role}
+                    {{ admin: "Admin", rh: "RH", manager: "Manager", employee: "Collaborateur", stagiaire: "Stagiaire", alternant: "Alternant" }[user.role] || user.role}
                   </Badge>
                   {user.role === "admin" && (
                     <Badge variant="default" className="gap-1">
