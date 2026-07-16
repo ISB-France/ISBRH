@@ -273,6 +273,82 @@ def _csv_upload(name, content):
     return SimpleUploadedFile(name, content.encode("utf-8-sig"), content_type="text/csv")
 
 
+class ImportEvolutionsTests(TestCase):
+    """Import de masse d'evolutions (poste/service/site/statut/niveau/
+    coefficient/salaire) via CSV, colonnes : Matricule, Type, Ancienne
+    valeur, Nouvelle valeur, Date d'effet."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", matricule="00000123",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_import_evolutions_creates_records(self):
+        csv_content = (
+            "Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet\n"
+            "00000123,poste,Développeur,Développeur senior,01/09/2024\n"
+            "00000123,salaire,2200,2500,01/09/2024\n"
+        )
+        response = self.client.post(
+            "/api/users/import_evolutions/",
+            {"file": _csv_upload("evolutions.csv", csv_content)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 2)
+        self.assertEqual(Evolution.objects.filter(employee=self.employee).count(), 2)
+        evo = Evolution.objects.get(employee=self.employee, type_evolution="poste")
+        self.assertEqual(evo.ancienne_valeur, "Développeur")
+        self.assertEqual(evo.nouvelle_valeur, "Développeur senior")
+        self.assertEqual(evo.auteur_id, self.rh_user.id)
+
+    def test_import_evolutions_rejects_unknown_matricule(self):
+        csv_content = (
+            "Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet\n"
+            "99999999,poste,A,B,01/09/2024\n"
+        )
+        response = self.client.post(
+            "/api/users/import_evolutions/",
+            {"file": _csv_upload("evolutions.csv", csv_content)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["created"], 0)
+        self.assertEqual(len(response.data["errors"]), 1)
+
+    def test_import_evolutions_rejects_invalid_type(self):
+        csv_content = (
+            "Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet\n"
+            "00000123,inconnu,A,B,01/09/2024\n"
+        )
+        response = self.client.post(
+            "/api/users/import_evolutions/",
+            {"file": _csv_upload("evolutions.csv", csv_content)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["created"], 0)
+        self.assertEqual(len(response.data["errors"]), 1)
+
+    def test_manager_cannot_import_evolutions(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.client.force_authenticate(user=manager)
+        response = self.client.post(
+            "/api/users/import_evolutions/",
+            {"file": _csv_upload("evolutions.csv", "Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet\n")},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 403)
+
+
 class ImportDeduplicationTests(TestCase):
     """L'import collaborateurs sur un matricule deja cree par l'import Kostango
     doit mettre a jour le compte existant, pas en creer un second."""

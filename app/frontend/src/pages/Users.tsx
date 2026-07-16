@@ -34,7 +34,7 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importType, setImportType] = useState<"users" | "formations" | "augmentations" | "collaborateurs">("users");
+  const [importType, setImportType] = useState<"users" | "formations" | "augmentations" | "collaborateurs" | "evolutions">("users");
   const { toast, show, setToast } = useToast();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [sortField, setSortField] = useState<string | null>(null);
@@ -121,6 +121,7 @@ export default function Users() {
       formations: "/users/import_formations/",
       augmentations: "/users/import_augmentations/",
       collaborateurs: "/users/import_collaborateurs/",
+      evolutions: "/users/import_evolutions/",
     };
 
     const labels: Record<string, string> = {
@@ -128,6 +129,7 @@ export default function Users() {
       formations: "formations",
       augmentations: "augmentations",
       collaborateurs: "collaborateurs",
+      evolutions: "évolutions",
     };
 
     try {
@@ -176,13 +178,14 @@ export default function Users() {
           <div className="flex gap-2">
             <select
               value={importType}
-              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations" | "collaborateurs")}
+              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations" | "collaborateurs" | "evolutions")}
               className="h-10 rounded-md border border-border bg-white px-3 text-sm"
             >
               <option value="users">Import utilisateurs</option>
               <option value="collaborateurs">Import évolution professionnelle</option>
               <option value="formations">Import formations</option>
               <option value="augmentations">Import augmentations</option>
+              <option value="evolutions">Import évolutions (historique)</option>
             </select>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
               <Upload className="h-4 w-4" />

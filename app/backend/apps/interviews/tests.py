@@ -250,6 +250,51 @@ class PrintTemplateTests(TestCase):
         self.assertIn("Historique des entretiens", html)
 
 
+class EmployeeWithoutManagerTests(TestCase):
+    """Un salarie classique sans N+1 (manager=None) doit pouvoir avoir des
+    entretiens crees, imprimes et generes via campagne sans erreur — le
+    manager de l'entretien retombe alors sur le createur (RH)."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=None,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_create_and_print_interview_without_manager(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "content": {},
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        self.assertEqual(interview.manager_id, self.rh_user.id)
+
+        print_response = self.client.get(f"/api/interviews/{interview.id}/print/")
+        self.assertEqual(print_response.status_code, 200)
+
+    def test_campaign_generate_falls_back_to_creator_manager(self):
+        template = InterviewTemplate.objects.create(
+            name="T", type="annual", sections=[{"id": "s1", "title": "S", "questions": []}],
+        )
+        campaign = Campaign.objects.create(
+            name="Camp", template=template,
+            start_date=datetime.date(2026, 1, 1), due_date=datetime.date(2026, 12, 31),
+            population_filter={"employees": [self.employee.id]},
+        )
+        response = self.client.post(f"/api/campaigns/{campaign.id}/generate/")
+        self.assertEqual(response.status_code, 200, response.data)
+        interview = Interview.objects.get(campaign=campaign, employee=self.employee)
+        self.assertEqual(interview.manager_id, self.rh_user.id)
+
+
 class InterviewManagerReassignmentTests(TestCase):
     """Changer le manager (N+1) d'un employe doit resynchroniser
     automatiquement le champ Interview.manager de ses entretiens, pour que

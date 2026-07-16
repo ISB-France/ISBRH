@@ -539,6 +539,76 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response({"created": created, "errors": errors})
 
     @action(detail=False, methods=["post"])
+    def import_evolutions(self, request):
+        """Import de masse d'evolutions historiques (poste/service/site/
+        statut/niveau/coefficient/salaire), colonnes CSV attendues :
+        Matricule, Type, Ancienne valeur, Nouvelle valeur, Date d'effet."""
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        import csv
+        import io
+        from datetime import datetime
+
+        valid_types = dict(Evolution.TypeEvolution.choices)
+
+        decoded = file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(decoded))
+        created = 0
+        errors = []
+
+        for row_num, row in enumerate(reader, start=2):
+            matricule = row.get("Matricule", "").strip()
+            if not matricule:
+                errors.append(f"Ligne {row_num}: Matricule manquant")
+                continue
+
+            employee = User.objects.filter(matricule=matricule).first()
+            if not employee:
+                errors.append(f"Ligne {row_num}: collaborateur matricule {matricule} introuvable")
+                continue
+
+            type_evolution = row.get("Type", "").strip().lower()
+            if type_evolution not in valid_types:
+                errors.append(
+                    f"Ligne {row_num}: type '{type_evolution}' invalide "
+                    f"(attendu: {', '.join(valid_types)})"
+                )
+                continue
+
+            try:
+                date_str = row.get("Date d'effet", "").strip()
+                date_effet = None
+                if date_str:
+                    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y"):
+                        try:
+                            date_effet = datetime.strptime(date_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+
+                Evolution.objects.create(
+                    employee=employee,
+                    type_evolution=type_evolution,
+                    ancienne_valeur=row.get("Ancienne valeur", "").strip(),
+                    nouvelle_valeur=row.get("Nouvelle valeur", "").strip(),
+                    date_effet=date_effet,
+                    auteur=request.user,
+                )
+                created += 1
+            except Exception as e:
+                errors.append(f"Ligne {row_num}: {e}")
+
+        return Response({"created": created, "errors": errors})
+
+    @action(detail=False, methods=["post"])
     def import_collaborateurs(self, request):
         if request.user.role not in RH_ROLES:
             return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
