@@ -127,7 +127,8 @@ export default function InterviewDetail() {
     const url = URL.createObjectURL(res.data);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `entretien-${id}.pdf`;
+    const match = (res.headers["content-disposition"] as string | undefined)?.match(/filename="?([^"]+)"?/);
+    a.download = match ? match[1] : `entretien-${id}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   }, [id]);

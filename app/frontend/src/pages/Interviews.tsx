@@ -13,12 +13,17 @@ import api from "../api";
 import type { Interview, User } from "../types";
 import { formatDate } from "../lib/utils";
 
+const filenameFromContentDisposition = (contentDisposition: string | undefined, fallback: string) => {
+  const match = contentDisposition?.match(/filename="?([^"]+)"?/);
+  return match ? match[1] : fallback;
+};
+
 const downloadPdf = async (id: number) => {
   const res = await api.get(`/interviews/${id}/pdf/`, { responseType: "blob" });
   const url = URL.createObjectURL(res.data);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `entretien_${id}.pdf`;
+  a.download = filenameFromContentDisposition(res.headers["content-disposition"], `entretien_${id}.pdf`);
   a.click();
   URL.revokeObjectURL(url);
 };
