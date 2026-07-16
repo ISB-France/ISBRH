@@ -209,7 +209,7 @@ export default function Interviews() {
                 </th>
                 <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("employee")}>
                   <div className="flex items-center gap-1">
-                    Employé
+                    Collaborateur
                     {sortField === "employee" ? (
                       sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                     ) : (

@@ -212,7 +212,7 @@ export default function CampaignForm() {
 
             <div>
               <label className="mb-1.5 block text-sm font-medium">
-                Ou sélectionner des employés spécifiques
+                Ou sélectionner des collaborateurs spécifiques
                 {selectedEmployees.length > 0 && (
                   <span className="ml-2 text-xs text-muted-foreground">({selectedEmployees.length} sélectionné{selectedEmployees.length > 1 ? "s" : ""})</span>
                 )}
