@@ -40,13 +40,6 @@ body {
   transition: background-color 0.2s, color 0.2s;
 }
 
-/* glass-dark : effet verre reel sur les surfaces de type carte, exception
-   documentee — ne pas generaliser aux autres themes sombres. */
-[data-theme="glass-dark"] .bg-card {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-weight: 600;
