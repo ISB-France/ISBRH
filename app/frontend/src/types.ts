@@ -52,8 +52,6 @@ export interface User {
   agence_interim: string;
   icon: string;
   preferences: string;
-  code_badge: string | null;
-  is_manager_evp: boolean;
 }
 
 export interface Campaign {
@@ -172,61 +170,3 @@ export interface InterviewStats {
   upcoming: number;
 }
 
-// --- EVP (Éléments Variables de Paie) ---
-// NOTE: les endpoits /api/evp/* consommés par ce module ne sont pas encore
-// implémentés côté backend (seuls les modèles Django existent à ce stade).
-// Ces types décrivent le contrat provisoire attendu par le frontend — voir
-// src/pages/evp/api.ts pour le détail par endpoint.
-
-export const ABSENCE_CODES: { value: string; label: string }[] = [
-  { value: "0971", label: "APLD" },
-  { value: "0951", label: "Congé payé" },
-  { value: "0950", label: "RTT" },
-  { value: "2000", label: "Maladie" },
-  { value: "2020", label: "Accident du travail" },
-  { value: "1000", label: "Maladie professionnelle" },
-  { value: "2010", label: "Maternité" },
-  { value: "2040", label: "Paternité" },
-  { value: "0990", label: "Événement familial" },
-  { value: "0991", label: "Enfant malade" },
-  { value: "0981", label: "Congé sans solde" },
-  { value: "0978", label: "Absence justifiée et payée" },
-  { value: "0977", label: "Absence non rémunérée" },
-  { value: "0974", label: "Grève" },
-  { value: "1040", label: "Accident de trajet" },
-  { value: "0979", label: "Absence injustifiée" },
-];
-
-export interface JourTravaille {
-  id: number;
-  employee: number;
-  date: string; // YYYY-MM-DD
-  organisation: "jour" | "equipe" | "nuit";
-  heures_travaillees_calcule: string;
-  heures_travaillees_retenu: string;
-  heures_travaillees_modifie_manuellement: boolean;
-  heures_travaillees_motif_modification: string | null;
-  heures_nuit_calcule: string;
-  heures_nuit_retenu: string;
-  heures_nuit_modifie_manuellement: boolean;
-  heures_nuit_motif_modification: string | null;
-  heures_sup_payees: string;
-  heures_sup_recuperees: string;
-}
-
-export interface Absence {
-  id: number;
-  employee: number;
-  code_absence: string;
-  date_debut: string;
-  date_fin: string;
-  demi_journee: boolean;
-  statut: "en_attente" | "validee" | "refusee";
-}
-
-export interface ClotureStatut {
-  employee: number;
-  mois: number;
-  annee: number;
-  statut: "draft" | "cloture";
-}

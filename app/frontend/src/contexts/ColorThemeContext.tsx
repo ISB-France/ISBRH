@@ -272,14 +272,12 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ColorThemeProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
-  // Ecrans sans session utilisateur fiable (login, callbacks OIDC, et le
-  // kiosque badge partage entre managers) : toujours le rendu clair par
-  // defaut (isb, hue=36), jamais le thème du dernier utilisateur connecté
-  // sur ce poste. Inchangé par cette migration.
+  // Ecrans sans session utilisateur fiable (login, callbacks OIDC) :
+  // toujours le rendu clair par defaut (isb, hue=36), jamais le thème du
+  // dernier utilisateur connecté sur ce poste. Inchangé par cette migration.
   const forcesNeutralTheme =
     location.pathname === "/login" ||
-    location.pathname.startsWith("/auth/") ||
-    location.pathname === "/evp/badge";
+    location.pathname.startsWith("/auth/");
 
   const [theme, setThemeState] = useState<ColorTheme>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);

@@ -24,14 +24,13 @@ class NotificationAdmin(admin.ModelAdmin):
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ["email", "first_name", "last_name", "role", "matricule", "service", "position", "statut", "is_manager_evp"]
-    list_filter = ["role", "service", "position", "statut", "type_contrat", "site", "is_manager_evp"]
+    list_display = ["email", "first_name", "last_name", "role", "matricule", "service", "position", "statut"]
+    list_filter = ["role", "service", "position", "statut", "type_contrat", "site"]
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         ("Identité", {"fields": ("first_name", "last_name", "sexe", "date_naissance", "telephone", "photo")}),
         ("Contrat", {"fields": ("matricule", "hire_date", "date_sortie", "type_contrat", "statut", "niveau", "coefficient", "fonctionnement", "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre")}),
         ("Organisation", {"fields": ("role", "service", "position", "site", "manager", "agence_interim")}),
-        ("EVP", {"fields": ("code_badge", "is_manager_evp")}),
         ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
         ("Dates", {"fields": ("last_login", "date_joined")}),
     )

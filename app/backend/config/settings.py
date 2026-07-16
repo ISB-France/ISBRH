@@ -35,7 +35,6 @@ INSTALLED_APPS = [
     "mozilla_django_oidc",
     "apps.users",
     "apps.interviews",
-    "apps.evp",
 ]
 
 MIDDLEWARE = [
@@ -118,7 +117,6 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_THROTTLE_RATES": {
         "dev_login": "5/min",
-        "evp_badge_auth": "10/min",
     },
 }
 

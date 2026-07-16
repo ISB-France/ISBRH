@@ -48,7 +48,6 @@ class UserSerializer(serializers.ModelSerializer):
             "manager", "manager_name", "agence_interim",
             "icon",
             "preferences",
-            "code_badge", "is_manager_evp",
         ]
 
     def get_manager_name(self, obj):
@@ -65,23 +64,6 @@ class UserSerializer(serializers.ModelSerializer):
         if value == "admin" and getattr(self.instance, "role", None) != "admin":
             raise serializers.ValidationError("Le rôle admin ne peut pas être attribué via ce formulaire")
         return value
-
-    def _validate_rh_only_field(self, value, field_name):
-        request = self.context.get("request")
-        if request is None:
-            return value
-        current_value = getattr(self.instance, field_name, None)
-        if request.user.role not in RH_ROLES and value != current_value:
-            raise serializers.ValidationError(
-                "Seul un compte RH/Admin peut modifier ce champ."
-            )
-        return value
-
-    def validate_code_badge(self, value):
-        return self._validate_rh_only_field(value, "code_badge")
-
-    def validate_is_manager_evp(self, value):
-        return self._validate_rh_only_field(value, "is_manager_evp")
 
     def create(self, validated_data):
         validated_data["username"] = validated_data["email"]
@@ -126,12 +108,7 @@ class UserMeSerializer(serializers.ModelSerializer):
             "manager", "manager_name", "agence_interim",
             "icon",
             "preferences",
-            "is_manager_evp",
         ]
-        # is_manager_evp doit etre visible (le frontend en a besoin pour
-        # afficher/masquer l'entree de nav EVP) mais jamais modifiable via
-        # /api/auth/me/ — seul UserSerializer (RH/admin) peut l'ecrire.
-        read_only_fields = ["is_manager_evp"]
 
     def get_photo(self, obj):
         if obj.photo:

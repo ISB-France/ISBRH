@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Plus, X, Search } from "lucide-react";
@@ -45,9 +45,8 @@ export default function UserForm() {
   const [manager, setManager] = useState("");
   const [managerSearch, setManagerSearch] = useState("");
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const managerFieldRef = useRef<HTMLDivElement>(null);
   const [agenceInterim, setAgenceInterim] = useState("");
-  const [codeBadge, setCodeBadge] = useState("");
-  const [isManagerEvp, setIsManagerEvp] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
@@ -77,21 +76,14 @@ export default function UserForm() {
     queryFn: () => api.get("/users/").then((r) => r.data),
   });
 
-  const { data: currentUser } = useQuery<User>({
-    queryKey: ["me"],
-    queryFn: () => api.get("/auth/me/").then((r) => r.data),
-  });
-  // code_badge / is_manager_evp sont reserves RH/admin cote API
-  // (UserSerializer._validate_rh_only_field) — cohérent ici : un manager
-  // ne doit meme pas voir ces champs, plutot que de les afficher pour se
-  // les voir rejeter silencieusement a l'enregistrement.
-  const canEditEvpFields = currentUser?.role === "rh" || currentUser?.role === "admin";
+  const managerRoles = ["manager", "stagiaire", "employee", "alternant"];
 
   const filteredManagers = allUsers?.filter((u) => {
     const q = managerSearch.toLowerCase();
     return (
       u.id !== Number(id) &&
       u.statut === "actif" &&
+      managerRoles.includes(u.role) &&
       (`${u.first_name} ${u.last_name}`.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q))
     );
@@ -99,9 +91,6 @@ export default function UserForm() {
 
   useEffect(() => {
     if (!id) {
-      api.get("/users/next_matricule/").then((r) => {
-        setMatricule(r.data.matricule);
-      });
       return;
     }
     api.get(`/users/${id}/`).then((r) => {
@@ -131,12 +120,19 @@ export default function UserForm() {
       setSite(d.site ?? "");
       setManager(d.manager ?? "");
       setAgenceInterim(d.agence_interim ?? "");
-      // Toujours charges (meme si non-RH), pour que le PUT resoumette la
-      // valeur existante inchangee plutot que de l'ecraser silencieusement.
-      setCodeBadge(d.code_badge ?? "");
-      setIsManagerEvp(d.is_manager_evp ?? false);
     });
   }, [id]);
+
+  useEffect(() => {
+    if (!showManagerDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (managerFieldRef.current && !managerFieldRef.current.contains(e.target as Node)) {
+        setShowManagerDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showManagerDropdown]);
 
   // Inline creation handlers
   const handleCreateService = async () => {
@@ -169,6 +165,11 @@ export default function UserForm() {
     setFieldErrors({});
     setFormError("");
 
+    if (!/^\d{8}$/.test(matricule)) {
+      setFieldErrors({ matricule: "Le matricule doit être composé de 8 chiffres (ex. 00004521)." });
+      return;
+    }
+
     const payload = {
       email,
       first_name: firstName,
@@ -192,10 +193,6 @@ export default function UserForm() {
       site: site || null,
       manager: manager || null,
       agence_interim: agenceInterim,
-      // Toujours envoyes (valeur existante inchangee si non-RH) — voir le
-      // commentaire au chargement des donnees.
-      code_badge: codeBadge || null,
-      is_manager_evp: isManagerEvp,
     };
 
     try {
@@ -215,13 +212,11 @@ export default function UserForm() {
             nextFieldErrors[key] = Array.isArray(value) ? value.join(" ") : String(value);
           }
           setFieldErrors(nextFieldErrors);
-          if (!nextFieldErrors.code_badge && !nextFieldErrors.is_manager_evp) {
-            setFormError(
-              nextFieldErrors.error ||
-                nextFieldErrors.detail ||
-                "Impossible d'enregistrer cet utilisateur."
-            );
-          }
+          setFormError(
+            nextFieldErrors.error ||
+              nextFieldErrors.detail ||
+              "Impossible d'enregistrer cet utilisateur."
+          );
           return;
         }
       }
@@ -415,7 +410,16 @@ export default function UserForm() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Matricule</label>
-                <Input value={matricule} disabled className="bg-muted" />
+                <Input
+                  value={matricule}
+                  onChange={(e) => setMatricule(e.target.value)}
+                  placeholder="00004521"
+                  maxLength={8}
+                  inputMode="numeric"
+                />
+                {fieldErrors.matricule && (
+                  <p className="mt-1 text-xs text-destructive">{fieldErrors.matricule}</p>
+                )}
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date d'embauche</label>
@@ -508,16 +512,21 @@ export default function UserForm() {
                 ))}
               </select>
             </div>
-            <div className="relative">
+            <div className="relative" ref={managerFieldRef}>
               <label className="mb-1.5 block text-sm font-medium">N+1</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  value={managerSearch}
+                  value={
+                    manager
+                      ? `${allUsers?.find((u) => String(u.id) === manager)?.first_name ?? ""} ${allUsers?.find((u) => String(u.id) === manager)?.last_name ?? ""}`.trim()
+                      : managerSearch
+                  }
                   onChange={(e) => { setManagerSearch(e.target.value); setShowManagerDropdown(true); }}
                   onFocus={() => setShowManagerDropdown(true)}
                   placeholder="Rechercher un manager..."
                   className="pl-9"
+                  readOnly={Boolean(manager)}
                 />
               </div>
               {showManagerDropdown && (
@@ -570,42 +579,6 @@ export default function UserForm() {
                 <label className="mb-1.5 block text-sm font-medium">Agence d'intérim</label>
                 <Input value={agenceInterim} onChange={(e) => setAgenceInterim(e.target.value)} />
               </div>
-            )}
-
-            {canEditEvpFields && (
-              <>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium">Code badge</label>
-                  <Input
-                    value={codeBadge}
-                    onChange={(e) => setCodeBadge(e.target.value)}
-                    placeholder="Ex: BADGE00123"
-                  />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Identifiant du badge physique (doit être unique) — utilisé pour l'accès kiosque EVP.
-                  </p>
-                  {fieldErrors.code_badge && (
-                    <p className="mt-1 text-xs text-destructive">{fieldErrors.code_badge}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <input
-                      type="checkbox"
-                      checked={isManagerEvp}
-                      onChange={(e) => setIsManagerEvp(e.target.checked)}
-                      className="h-4 w-4"
-                    />
-                    Accès EVP (manager)
-                  </label>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Autorise cet utilisateur à saisir les plannings/EVP de son équipe.
-                  </p>
-                  {fieldErrors.is_manager_evp && (
-                    <p className="mt-1 text-xs text-destructive">{fieldErrors.is_manager_evp}</p>
-                  )}
-                </div>
-              </>
             )}
           </CardContent>
         </Card>
