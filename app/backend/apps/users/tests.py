@@ -492,3 +492,46 @@ class HistoryRecordsProtectEmployeeDeletionTests(TestCase):
     def test_deleting_employee_without_history_still_works(self):
         self.employee.delete()
         self.assertFalse(User.objects.filter(pk=self.employee.pk).exists())
+
+
+class ExportHistoryXlsxTests(TestCase):
+    """Export consolide (entretiens PRO/EVALUATION + formations + evolutions
+    + augmentations, 6 ans) accessible uniquement RH/admin."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager,
+        )
+        Formation.objects.create(
+            employee=self.employee, libelle="Formation Python",
+            date_formation=datetime.date.today(),
+        )
+        Augmentation.objects.create(
+            employee=self.employee, montant=1000, date_effet=datetime.date.today(),
+        )
+        Evolution.objects.create(
+            employee=self.employee, type_evolution="poste",
+            ancienne_valeur="A", nouvelle_valeur="B", date_effet=datetime.date.today(),
+        )
+        self.client = APIClient()
+
+    def test_rh_can_export_history_xlsx(self):
+        self.client.force_authenticate(user=self.rh_user)
+        response = self.client.get(f"/api/users/{self.employee.id}/export_history_xlsx/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    def test_manager_cannot_export_history_xlsx(self):
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.get(f"/api/users/{self.employee.id}/export_history_xlsx/")
+        self.assertEqual(response.status_code, 403)

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, Plus, Search, Upload, Download, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -137,6 +137,16 @@ export default function Users() {
     }
     setImporting(false);
     e.target.value = "";
+  };
+
+  const handleExportHistory = async (u: User) => {
+    const res = await api.get(`/users/${u.id}/export_history_xlsx/`, { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `historique_${u.last_name}_${u.first_name}_6ans.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (isLoading && !users) return <LoadingScreen />;
@@ -332,9 +342,14 @@ export default function Users() {
                     </td>
                     {(currentUser?.role === "rh" || currentUser?.role === "admin") && (
                       <td className="px-6 py-3">
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/users/${u.id}/edit`); }}>
-                          Modifier
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/users/${u.id}/edit`); }}>
+                            Modifier
+                          </Button>
+                          <Button variant="ghost" size="sm" title="Exporter l'historique (6 ans)" onClick={(e) => { e.stopPropagation(); handleExportHistory(u); }}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     )}
                   </tr>
