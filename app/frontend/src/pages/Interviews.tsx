@@ -1,10 +1,13 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Download, Trash2, Upload, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Download, Trash2, Upload, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
 import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import ErrorScreen from "../components/ErrorScreen";
@@ -37,6 +40,13 @@ const openPrint = async (id: number) => {
   w.focus();
 };
 
+const toIsoDate = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const statusLabel: Record<string, string> = {
   draft: "Brouillon",
   in_progress: "En cours",
@@ -52,8 +62,7 @@ export default function Interviews() {
   const [scope, setScope] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [year, setYear] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -109,10 +118,12 @@ export default function Interviews() {
     if (showHistory && year) {
       filtered = filtered.filter((iv) => iv.due_date.slice(0, 4) === year);
     }
-    if (!showHistory && (dateFrom || dateTo)) {
+    if (!showHistory && (dateRange?.from || dateRange?.to)) {
+      const from = dateRange.from ? toIsoDate(dateRange.from) : undefined;
+      const to = dateRange.to ? toIsoDate(dateRange.to) : undefined;
       filtered = filtered.filter((iv) => {
-        if (dateFrom && iv.due_date < dateFrom) return false;
-        if (dateTo && iv.due_date > dateTo) return false;
+        if (from && iv.due_date < from) return false;
+        if (to && iv.due_date > to) return false;
         return true;
       });
     }
@@ -128,7 +139,7 @@ export default function Interviews() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [interviews, sortField, sortDir, showHistory, year, dateFrom, dateTo]);
+  }, [interviews, sortField, sortDir, showHistory, year, dateRange]);
 
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les entretiens" onRetry={refetch} />;
@@ -196,23 +207,34 @@ export default function Interviews() {
           </select>
         )}
         {!showHistory && (
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-muted-foreground">Date limite du</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
-            />
-            <label className="text-sm text-muted-foreground">au</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
-            />
-            {(dateFrom || dateTo) && (
-              <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); }}>
+          <div className="flex items-center gap-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="h-10 gap-2 text-sm font-normal">
+                  <CalendarIcon className="h-4 w-4" />
+                  {dateRange?.from
+                    ? dateRange.to
+                      ? `${formatDate(toIsoDate(dateRange.from))} – ${formatDate(toIsoDate(dateRange.to))}`
+                      : formatDate(toIsoDate(dateRange.from))
+                    : "Date limite"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  defaultMonth={dateRange?.from}
+                  modifiersClassNames={{
+                    range_start: "bg-primary text-primary-foreground rounded-md",
+                    range_end: "bg-primary text-primary-foreground rounded-md",
+                    range_middle: "bg-primary/15 text-foreground rounded-none underline decoration-primary decoration-2",
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+            {(dateRange?.from || dateRange?.to) && (
+              <Button variant="ghost" size="sm" onClick={() => setDateRange(undefined)}>
                 <X className="h-4 w-4" />
               </Button>
             )}
