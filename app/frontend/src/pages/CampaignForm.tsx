@@ -163,7 +163,7 @@ export default function CampaignForm() {
                 className="w-full rounded-md border border-border bg-white px-3 py-2 text-sm"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date de début</label>
                 <DateInput value={startDate} onChange={setStartDate} required />
@@ -181,7 +181,7 @@ export default function CampaignForm() {
             <CardTitle>Population cible</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Filtrer par site</label>
                 <select

@@ -220,7 +220,7 @@ export default function InterviewDetail() {
           <CardTitle>Informations générales</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="mb-4 grid grid-cols-2 gap-3 border-b border-border pb-4">
+          <div className="mb-4 grid grid-cols-1 gap-3 border-b border-border pb-4 sm:grid-cols-2">
             <div>
               <span className="text-xs font-semibold uppercase text-muted-foreground">Date d'entretien</span>
               <p className="text-sm font-medium">{formatDate(new Date())}</p>
@@ -236,7 +236,7 @@ export default function InterviewDetail() {
               <p className="text-sm font-medium">{interview.employee_detail?.site_name || "—"}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
               <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Manager</h4>
               <table className="w-full text-sm">
