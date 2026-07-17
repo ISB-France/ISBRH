@@ -228,7 +228,10 @@ export default function Interviews() {
                   modifiersClassNames={{
                     range_start: "!bg-primary !text-primary-foreground rounded-l-full rounded-r-none",
                     range_end: "!bg-primary !text-primary-foreground rounded-r-full rounded-l-none",
-                    range_middle: "!bg-accent !text-foreground rounded-none",
+                    range_middle: "!text-foreground rounded-none",
+                  }}
+                  modifiersStyles={{
+                    range_middle: { backgroundColor: "#fff2f2" },
                   }}
                 />
               </PopoverContent>
