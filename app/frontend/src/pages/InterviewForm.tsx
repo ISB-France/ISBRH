@@ -88,7 +88,7 @@ export default function InterviewForm() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Employé</label>
+              <label className="mb-1.5 block text-sm font-medium">Collaborateur</label>
               <Select
                 value={employee}
                 onChange={(e) => setEmployee(e.target.value)}

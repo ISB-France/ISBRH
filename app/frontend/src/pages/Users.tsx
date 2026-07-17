@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, Upload, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, Plus, Search, Upload, Download, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -18,7 +18,7 @@ const roleLabel: Record<string, string> = {
   admin: "Admin",
   rh: "RH",
   manager: "Manager",
-  employee: "Employé",
+  employee: "Collaborateur",
   stagiaire: "Stagiaire",
   alternant: "Alternant",
 };
@@ -31,7 +31,7 @@ export default function Users() {
   const [search, setSearch] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [importType, setImportType] = useState<"users" | "formations" | "augmentations" | "collaborateurs">("users");
+  const [importType, setImportType] = useState<"users" | "formations" | "augmentations" | "collaborateurs" | "evolutions">("users");
   const { toast, show, setToast } = useToast();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [sortField, setSortField] = useState<string | null>(null);
@@ -118,6 +118,7 @@ export default function Users() {
       formations: "/users/import_formations/",
       augmentations: "/users/import_augmentations/",
       collaborateurs: "/users/import_collaborateurs/",
+      evolutions: "/users/import_evolutions/",
     };
 
     const labels: Record<string, string> = {
@@ -125,6 +126,7 @@ export default function Users() {
       formations: "formations",
       augmentations: "augmentations",
       collaborateurs: "collaborateurs",
+      evolutions: "évolutions",
     };
 
     try {
@@ -139,6 +141,16 @@ export default function Users() {
     e.target.value = "";
   };
 
+  const handleExportHistory = async (u: User) => {
+    const res = await api.get(`/users/${u.id}/export_history_xlsx/`, { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `historique_${u.last_name}_${u.first_name}_6ans.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (isLoading && !users) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les utilisateurs" onRetry={refetch} />;
 
@@ -150,13 +162,14 @@ export default function Users() {
           <div className="flex gap-2">
             <select
               value={importType}
-              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations" | "collaborateurs")}
+              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations" | "collaborateurs" | "evolutions")}
               className="h-10 rounded-md border border-border bg-white px-3 text-sm"
             >
               <option value="users">Import utilisateurs</option>
               <option value="collaborateurs">Import évolution professionnelle</option>
               <option value="formations">Import formations</option>
               <option value="augmentations">Import augmentations</option>
+              <option value="evolutions">Import évolutions (historique)</option>
             </select>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
               <Upload className="h-4 w-4" />
@@ -332,9 +345,14 @@ export default function Users() {
                     </td>
                     {(currentUser?.role === "rh" || currentUser?.role === "admin") && (
                       <td className="px-6 py-3">
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/users/${u.id}/edit`); }}>
-                          Modifier
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/users/${u.id}/edit`); }}>
+                            Modifier
+                          </Button>
+                          <Button variant="ghost" size="sm" title="Exporter l'historique (6 ans)" onClick={(e) => { e.stopPropagation(); handleExportHistory(u); }}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     )}
                   </tr>

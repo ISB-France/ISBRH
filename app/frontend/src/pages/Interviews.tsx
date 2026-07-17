@@ -1,10 +1,13 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Download, Trash2, Upload, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Download, Trash2, Upload, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
 import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import ErrorScreen from "../components/ErrorScreen";
@@ -13,12 +16,17 @@ import api from "../api";
 import type { Interview, User } from "../types";
 import { formatDate } from "../lib/utils";
 
+const filenameFromContentDisposition = (contentDisposition: string | undefined, fallback: string) => {
+  const match = contentDisposition?.match(/filename="?([^"]+)"?/);
+  return match ? match[1] : fallback;
+};
+
 const downloadPdf = async (id: number) => {
   const res = await api.get(`/interviews/${id}/pdf/`, { responseType: "blob" });
   const url = URL.createObjectURL(res.data);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `entretien_${id}.pdf`;
+  a.download = filenameFromContentDisposition(res.headers["content-disposition"], `entretien_${id}.pdf`);
   a.click();
   URL.revokeObjectURL(url);
 };
@@ -30,6 +38,13 @@ const openPrint = async (id: number) => {
   w.document.write(res.data);
   w.document.close();
   w.focus();
+};
+
+const toIsoDate = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
 
 const statusLabel: Record<string, string> = {
@@ -46,6 +61,8 @@ export default function Interviews() {
   const [type, setType] = useState("");
   const [scope, setScope] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [year, setYear] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -89,9 +106,29 @@ export default function Interviews() {
       }).then((r) => r.data),
   });
 
+  const availableYears = useMemo(() => {
+    if (!interviews) return [];
+    const years = new Set(interviews.map((iv) => iv.due_date.slice(0, 4)));
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [interviews]);
+
   const displayed = useMemo(() => {
-    if (!interviews || !sortField) return interviews;
-    return [...interviews].sort((a, b) => {
+    if (!interviews) return interviews;
+    let filtered = interviews;
+    if (showHistory && year) {
+      filtered = filtered.filter((iv) => iv.due_date.slice(0, 4) === year);
+    }
+    if (!showHistory && (dateRange?.from || dateRange?.to)) {
+      const from = dateRange.from ? toIsoDate(dateRange.from) : undefined;
+      const to = dateRange.to ? toIsoDate(dateRange.to) : undefined;
+      filtered = filtered.filter((iv) => {
+        if (from && iv.due_date < from) return false;
+        if (to && iv.due_date > to) return false;
+        return true;
+      });
+    }
+    if (!sortField) return filtered;
+    return [...filtered].sort((a, b) => {
       let cmp = 0;
       if (sortField === "employee") {
         const aName = `${a.employee_detail?.first_name ?? ""} ${a.employee_detail?.last_name ?? ""}`.trim();
@@ -102,7 +139,7 @@ export default function Interviews() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [interviews, sortField, sortDir]);
+  }, [interviews, sortField, sortDir, showHistory, year, dateRange]);
 
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les entretiens" onRetry={refetch} />;
@@ -157,6 +194,57 @@ export default function Interviews() {
             Historique
           </button>
         </div>
+        {showHistory && (
+          <select
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+          >
+            <option value="">Toutes les années</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        )}
+        {!showHistory && (
+          <div className="flex items-center gap-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="h-10 gap-2 text-sm font-normal">
+                  <CalendarIcon className="h-4 w-4" />
+                  {dateRange?.from
+                    ? dateRange.to
+                      ? `${formatDate(toIsoDate(dateRange.from))} – ${formatDate(toIsoDate(dateRange.to))}`
+                      : formatDate(toIsoDate(dateRange.from))
+                    : "Date limite"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  defaultMonth={dateRange?.from}
+                  modifiersClassNames={{
+                    range_start: "rounded-l-full rounded-r-none",
+                    range_end: "rounded-r-full rounded-l-none",
+                    range_middle: "rounded-none",
+                  }}
+                  modifiersStyles={{
+                    range_start: { backgroundColor: "#f6b8b8", color: "#7f1d1d" },
+                    range_end: { backgroundColor: "#f6b8b8", color: "#7f1d1d" },
+                    range_middle: { backgroundColor: "#fff2f2", color: "#7f1d1d" },
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+            {(dateRange?.from || dateRange?.to) && (
+              <Button variant="ghost" size="sm" onClick={() => setDateRange(undefined)}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
         {selectedIds.length > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setShowBulkDeleteConfirm(true)}>
             <Trash2 className="mr-1 h-4 w-4" />
@@ -186,7 +274,7 @@ export default function Interviews() {
                 </th>
                 <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("employee")}>
                   <div className="flex items-center gap-1">
-                    Employé
+                    Collaborateur
                     {sortField === "employee" ? (
                       sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
                     ) : (

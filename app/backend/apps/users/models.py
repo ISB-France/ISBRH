@@ -77,6 +77,11 @@ class User(AbstractUser):
         INACTIF = "inactif", "Inactif"
         SORTIE = "sortie", "Sortie"
 
+    class CategorieSocioPro(models.TextChoices):
+        OUVRIER = "ouvrier", "Ouvrier"
+        AGENT_MAITRISE = "agent_maitrise", "Agent de maîtrise"
+        CADRE = "cadre", "Cadre"
+
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE, db_index=True)
 
@@ -103,6 +108,14 @@ class User(AbstractUser):
     forfait_jour = models.BooleanField(default=False)
     tickets_restaurant = models.BooleanField(default=False)
     cadre = models.BooleanField(default=False)
+    # Categorie socio-professionnelle (ouvrier/agent de maitrise/cadre) :
+    # distincte de `statut` (actif/inactif/sortie, utilise pour les filtres
+    # RH) et de `cadre` (booleen paie existant). Vierge par defaut, a
+    # renseigner manuellement — affichee sur les entretiens a la place de
+    # `statut`, qui n'a pas de sens dans ce contexte.
+    categorie_socio_pro = models.CharField(
+        max_length=20, choices=CategorieSocioPro.choices, blank=True, db_index=True
+    )
 
     # Organisation
     service = models.ForeignKey(

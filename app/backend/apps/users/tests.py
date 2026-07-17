@@ -204,9 +204,110 @@ class AdminRoleProtectionTests(TestCase):
         self.assertEqual(superuser.role, "admin")
         self.assertTrue(superuser.is_superuser)
 
+    def test_put_resubmitting_unchanged_admin_role_is_allowed(self):
+        # Regression : le formulaire d'edition resoumet toujours le role
+        # courant. Editer un autre champ d'un compte deja role="admin" ne
+        # doit pas echouer juste parce que le payload contient "admin".
+        admin_user = User.objects.create_superuser(
+            username="admin2@example.com",
+            email="admin2@example.com",
+            password="pass1234",
+            role="admin",
+        )
+        response = self.client.put(
+            f"/api/users/{admin_user.id}/",
+            {
+                "email": admin_user.email,
+                "first_name": "Admin",
+                "last_name": "Modifié",
+                "role": "admin",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        admin_user.refresh_from_db()
+        self.assertEqual(admin_user.last_name, "Modifié")
+        self.assertEqual(admin_user.role, "admin")
+
 
 def _csv_upload(name, content):
     return SimpleUploadedFile(name, content.encode("utf-8-sig"), content_type="text/csv")
+
+
+class ImportEvolutionsTests(TestCase):
+    """Import de masse d'evolutions (poste/service/site/statut/niveau/
+    coefficient/salaire) via CSV, colonnes : Matricule, Type, Ancienne
+    valeur, Nouvelle valeur, Date d'effet."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", matricule="00000123",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_import_evolutions_creates_records(self):
+        csv_content = (
+            "Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet\n"
+            "00000123,poste,Développeur,Développeur senior,01/09/2024\n"
+            "00000123,salaire,2200,2500,01/09/2024\n"
+        )
+        response = self.client.post(
+            "/api/users/import_evolutions/",
+            {"file": _csv_upload("evolutions.csv", csv_content)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 2)
+        self.assertEqual(Evolution.objects.filter(employee=self.employee).count(), 2)
+        evo = Evolution.objects.get(employee=self.employee, type_evolution="poste")
+        self.assertEqual(evo.ancienne_valeur, "Développeur")
+        self.assertEqual(evo.nouvelle_valeur, "Développeur senior")
+        self.assertEqual(evo.auteur_id, self.rh_user.id)
+
+    def test_import_evolutions_rejects_unknown_matricule(self):
+        csv_content = (
+            "Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet\n"
+            "99999999,poste,A,B,01/09/2024\n"
+        )
+        response = self.client.post(
+            "/api/users/import_evolutions/",
+            {"file": _csv_upload("evolutions.csv", csv_content)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["created"], 0)
+        self.assertEqual(len(response.data["errors"]), 1)
+
+    def test_import_evolutions_rejects_invalid_type(self):
+        csv_content = (
+            "Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet\n"
+            "00000123,inconnu,A,B,01/09/2024\n"
+        )
+        response = self.client.post(
+            "/api/users/import_evolutions/",
+            {"file": _csv_upload("evolutions.csv", csv_content)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["created"], 0)
+        self.assertEqual(len(response.data["errors"]), 1)
+
+    def test_manager_cannot_import_evolutions(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.client.force_authenticate(user=manager)
+        response = self.client.post(
+            "/api/users/import_evolutions/",
+            {"file": _csv_upload("evolutions.csv", "Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet\n")},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class ImportDeduplicationTests(TestCase):
@@ -467,3 +568,46 @@ class HistoryRecordsProtectEmployeeDeletionTests(TestCase):
     def test_deleting_employee_without_history_still_works(self):
         self.employee.delete()
         self.assertFalse(User.objects.filter(pk=self.employee.pk).exists())
+
+
+class ExportHistoryXlsxTests(TestCase):
+    """Export consolide (entretiens PRO/EVALUATION + formations + evolutions
+    + augmentations, 6 ans) accessible uniquement RH/admin."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager,
+        )
+        Formation.objects.create(
+            employee=self.employee, libelle="Formation Python",
+            date_formation=datetime.date.today(),
+        )
+        Augmentation.objects.create(
+            employee=self.employee, montant=1000, date_effet=datetime.date.today(),
+        )
+        Evolution.objects.create(
+            employee=self.employee, type_evolution="poste",
+            ancienne_valeur="A", nouvelle_valeur="B", date_effet=datetime.date.today(),
+        )
+        self.client = APIClient()
+
+    def test_rh_can_export_history_xlsx(self):
+        self.client.force_authenticate(user=self.rh_user)
+        response = self.client.get(f"/api/users/{self.employee.id}/export_history_xlsx/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    def test_manager_cannot_export_history_xlsx(self):
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.get(f"/api/users/{self.employee.id}/export_history_xlsx/")
+        self.assertEqual(response.status_code, 403)

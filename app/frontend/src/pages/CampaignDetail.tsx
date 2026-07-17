@@ -170,7 +170,7 @@ export default function CampaignDetail() {
                     className="h-4 w-4"
                   />
                 </th>
-                <th className="px-6 pb-3 pt-4">Employé</th>
+                <th className="px-6 pb-3 pt-4">Collaborateur</th>
                 <th className="px-6 pb-3 pt-4">Statut</th>
                 <th className="px-6 pb-3 pt-4">Date limite</th>
                 <th className="px-6 pb-3 pt-4"></th>

@@ -6,6 +6,7 @@ from openpyxl import load_workbook
 from rest_framework.test import APIClient
 
 from apps.interviews.models import Campaign, Interview, InterviewTemplate
+from apps.interviews.templates import ANNUAL_TEMPLATE
 from apps.users.models import Site, User
 
 
@@ -212,6 +213,215 @@ class InterviewManagerDeletionTests(TestCase):
         interview.refresh_from_db()
         self.assertIsNone(interview.manager_id)
         self.assertTrue(Interview.objects.filter(pk=interview.pk).exists())
+
+
+class PreviousYearObjectivesBilanTests(TestCase):
+    """A la creation d'un nouvel entretien annuel, les objectifs et
+    competences fixes lors de l'entretien annuel precedent (complete/signe)
+    doivent etre repris dans des sections de bilan a evaluer."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.rh_user,
+        )
+        self.template = InterviewTemplate.objects.create(
+            name="Annuel", type="annual", sections=ANNUAL_TEMPLATE["sections"],
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_new_annual_interview_carries_forward_previous_objectives(self):
+        previous = Interview.objects.create(
+            employee=self.employee, manager=self.rh_user, type="annual",
+            status="completed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": ANNUAL_TEMPLATE["sections"]},
+        )
+        content = previous.content
+        for section in content["sections"]:
+            if section["id"] == "objectifs":
+                for q in section["questions"]:
+                    q["answer"] = f"objectif rempli {q['id']}"
+        previous.content = content
+        previous.save()
+
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        new_interview = Interview.objects.get(pk=response.data["id"])
+        sections_by_id = {s["id"]: s for s in new_interview.content["sections"]}
+        self.assertIn("bilan_objectifs_precedents", sections_by_id)
+        bilan_questions = sections_by_id["bilan_objectifs_precedents"]["questions"]
+        self.assertTrue(all(q["type"] == "objectif_bilan" for q in bilan_questions))
+        self.assertTrue(all(q["objectif_texte"].startswith("objectif rempli") for q in bilan_questions))
+        self.assertNotIn("bilan_competences_precedentes", sections_by_id)
+
+    def test_first_annual_interview_has_no_bilan_section(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        section_ids = [s["id"] for s in interview.content["sections"]]
+        self.assertNotIn("bilan_objectifs_precedents", section_ids)
+
+
+class PrintTemplateTests(TestCase):
+    """Le titre imprime doit refleter le type reel de l'entretien, un logo
+    doit etre present, et les blocs d'historique doivent apparaitre pour un
+    entretien de type bilan avec de l'historique disponible."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager,
+        )
+        self.client = APIClient()
+
+    def test_print_title_matches_interview_type_for_bilan(self):
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="professional",
+            status="completed", due_date=datetime.date(2026, 1, 1),
+            content={"employee_snapshot": {"salaire_brut": "2500"}},
+        )
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="bilan",
+            due_date=datetime.date(2026, 12, 31), content={},
+        )
+        self.client.force_authenticate(user=self.manager)
+        response = self.client.get(f"/api/interviews/{interview.id}/print/")
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn("ENTRETIEN DE BILAN", html.upper())
+        self.assertNotIn("ENTRETIEN D'ÉVALUATION", html.upper())
+        self.assertIn('<img class="logo"', html)
+        self.assertIn("Parcours professionnel", html)
+        self.assertIn("Historique des entretiens", html)
+
+
+class EmployeeWithoutManagerTests(TestCase):
+    """Un salarie classique sans N+1 (manager=None) doit pouvoir avoir des
+    entretiens crees, imprimes et generes via campagne sans erreur — le
+    manager de l'entretien retombe alors sur le createur (RH)."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=None,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_create_and_print_interview_without_manager(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "content": {},
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        self.assertEqual(interview.manager_id, self.rh_user.id)
+
+        print_response = self.client.get(f"/api/interviews/{interview.id}/print/")
+        self.assertEqual(print_response.status_code, 200)
+
+    def test_campaign_generate_falls_back_to_creator_manager(self):
+        template = InterviewTemplate.objects.create(
+            name="T", type="annual", sections=[{"id": "s1", "title": "S", "questions": []}],
+        )
+        campaign = Campaign.objects.create(
+            name="Camp", template=template,
+            start_date=datetime.date(2026, 1, 1), due_date=datetime.date(2026, 12, 31),
+            population_filter={"employees": [self.employee.id]},
+        )
+        response = self.client.post(f"/api/campaigns/{campaign.id}/generate/")
+        self.assertEqual(response.status_code, 200, response.data)
+        interview = Interview.objects.get(campaign=campaign, employee=self.employee)
+        self.assertEqual(interview.manager_id, self.rh_user.id)
+
+
+class InterviewManagerReassignmentTests(TestCase):
+    """Changer le manager (N+1) d'un employe doit resynchroniser
+    automatiquement le champ Interview.manager de ses entretiens, pour que
+    l'ancien manager perde l'acces et que le nouveau l'obtienne sans action
+    manuelle (cf. reassign_managers, qui reste un rattrapage explicite)."""
+
+    def test_changing_employee_manager_reassigns_existing_interviews(self):
+        old_manager = User.objects.create_user(
+            username="mgr_old", email="mgr_old@example.com", password="pass1234", role="manager"
+        )
+        new_manager = User.objects.create_user(
+            username="mgr_new", email="mgr_new@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=old_manager,
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=old_manager,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+
+        employee.manager = new_manager
+        employee.save()
+
+        interview.refresh_from_db()
+        self.assertEqual(interview.manager_id, new_manager.id)
+
+    def test_removing_employee_manager_clears_interview_manager(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager,
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=manager,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+
+        employee.manager = None
+        employee.save()
+
+        interview.refresh_from_db()
+        self.assertIsNone(interview.manager_id)
+
+    def test_unrelated_user_field_change_does_not_touch_interview_manager(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager,
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=manager,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+
+        employee.telephone = "0600000000"
+        employee.save()
+
+        interview.refresh_from_db()
+        self.assertEqual(interview.manager_id, manager.id)
 
 
 class InterviewEmployeeDeletionTests(TestCase):

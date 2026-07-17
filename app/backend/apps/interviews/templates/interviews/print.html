@@ -8,6 +8,7 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { margin: 2cm; font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10pt; color: #1a1a1a; line-height: 1.5; }
 
+    .logo { display: block; margin: 0 auto 10pt; height: 40pt; }
     h1 { font-size: 20pt; text-align: center; color: #1a1a1a; margin-bottom: 2pt; letter-spacing: 1pt; }
     .subtitle { text-align: center; color: #666; font-size: 9pt; margin-bottom: 24pt; }
 
@@ -63,13 +64,14 @@
   <button onclick="window.close()">Fermer</button>
 </div>
 
-<h1>ENTRETIEN D'ÉVALUATION</h1>
+{% if logo_data_uri %}<img class="logo" src="{{ logo_data_uri }}" alt="ISB">{% endif %}
+<h1>{{ interview.get_type_display|upper }}</h1>
 <p class="subtitle">ISB France — {% now "d/m/Y" %}</p>
 
 <div class="section">
   <h2>Informations générales</h2>
   <table class="info-grid">
-    <tr><td class="label">Date d'entretien :</td><td class="value">{% now "d/m/Y" %}</td></tr>
+    <tr><td class="label">Date d'entretien :</td><td class="value">{{ interview.date_realisation|date:"d/m/Y"|default:"—" }}</td></tr>
     <tr><td class="label">Nature de l'entretien :</td><td class="value">{{ interview.get_type_display }}</td></tr>
     <tr><td class="label">Lieu :</td><td class="value">{{ interview.content.lieu|default:"—" }}</td></tr>
   </table>
@@ -93,7 +95,7 @@
         <tr><td class="label">Date naissance</td><td class="value">{{ interview.employee.date_naissance|date:"d/m/Y"|default:"—" }}</td></tr>
         <tr><td class="label">Date embauche</td><td class="value">{{ interview.employee.hire_date|date:"d/m/Y"|default:"—" }}</td></tr>
         <tr><td class="label">Type contrat</td><td class="value">{{ interview.employee.get_type_contrat_display|default:"—" }}</td></tr>
-        <tr><td class="label">Statut</td><td class="value">{{ interview.employee.get_statut_display|default:"—" }}</td></tr>
+        <tr><td class="label">Catégorie</td><td class="value">{{ interview.employee.get_categorie_socio_pro_display|default:"—" }}</td></tr>
         <tr><td class="label">Poste / Fonction</td><td class="value">{{ interview.employee.position.name|default:"—" }}</td></tr>
         <tr><td class="label">Site</td><td class="value">{{ interview.employee.site.name|default:"—" }}</td></tr>
         <tr><td class="label">Coefficient</td><td class="value">{{ interview.employee.coefficient|default:"—" }}</td></tr>
@@ -103,7 +105,7 @@
   </div>
 </div>
 
-{% if career %}
+{% if interview.type == "professional" or interview.type == "bilan" %}{% if career %}
 <div class="section">
   <h2>Parcours professionnel</h2>
   <table style="width:100%; border-collapse: collapse; font-size: 9pt;">
@@ -123,9 +125,9 @@
     {% endfor %}
   </table>
 </div>
-{% endif %}
+{% endif %}{% endif %}
 
-{% if history and interview.type != "professional" %}
+{% if interview.type == "annual" or interview.type == "bilan" %}{% if history %}
 <div class="section">
   <h2>Historique des entretiens</h2>
   <table style="width:100%; border-collapse: collapse; font-size: 9pt;">
@@ -145,7 +147,7 @@
     {% endfor %}
   </table>
 </div>
-{% endif %}
+{% endif %}{% endif %}
 
 {% if interview.type == "bilan" and training_history %}
 <div class="section">
@@ -196,6 +198,17 @@
       <div class="q-label">{{ question.label }}</div>
       {% if question.type == "textarea" %}
       <div class="q-answer">{{ question.answer|default:"—" }}</div>
+      {% elif question.type == "objectif_bilan" %}
+      <div class="q-answer">
+        <p style="font-style:italic; color:#555; margin-bottom:4pt;">Objectif fixé : {{ question.objectif_texte|default:"—" }}</p>
+        <p><strong>Statut :</strong>
+          {% if question.answer.statut == "atteint" %}Atteint
+          {% elif question.answer.statut == "partiel" %}Partiellement atteint
+          {% elif question.answer.statut == "non_atteint" %}Non atteint
+          {% else %}—{% endif %}
+        </p>
+        {% if question.answer.commentaire %}<p style="margin-top:4pt;">{{ question.answer.commentaire }}</p>{% endif %}
+      </div>
       {% elif question.type == "yesno" %}
       <div class="q-answer">{% if question.answer == True %}Oui{% elif question.answer == False %}Non{% else %}—{% endif %}</div>
       {% elif question.type == "rating" %}

@@ -21,7 +21,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.db import models as db_models
 
-from .models import RH_ROLES, Evolution, Notification, Position, Service, Site, User
+from .models import RH_ROLES, Augmentation, Evolution, Formation, Notification, Position, Service, Site, User
 from .validators import validate_csv_upload
 from .serializers import (
     EvolutionSerializer,
@@ -161,6 +161,154 @@ class UserViewSet(viewsets.ModelViewSet):
         user = self.get_object()
         qs = Evolution.objects.filter(employee=user).order_by("date_effet", "created_at")
         return Response(EvolutionSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def export_history_xlsx(self, request, pk=None):
+        """Export consolidé des données historisées d'un salarié sur les 6
+        dernières années : entretiens professionnels et d'évaluation
+        (contenu complet), formations, évolutions, augmentations."""
+        from datetime import timedelta
+
+        from django.http import HttpResponse
+        from django.utils import timezone
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+        from apps.interviews.models import Interview
+        from apps.interviews.views import sanitize_cell_value
+
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        employee = self.get_object()
+        six_years_ago = timezone.now() - timedelta(days=365.25 * 6)
+
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        thin_border = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin"),
+        )
+
+        def write_header(ws, headers):
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_idx, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = thin_border
+
+        def write_row(ws, row_idx, values):
+            for col_idx, val in enumerate(values, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=sanitize_cell_value(val))
+                cell.border = thin_border
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        def autosize(ws):
+            ws.freeze_panes = "A2"
+            for col_idx, col in enumerate(ws.columns, 1):
+                col_letter = chr(64 + col_idx) if col_idx <= 26 else "A"
+                max_len = max((len(str(c.value)) for c in col if c.value), default=0)
+                ws.column_dimensions[col_letter].width = min(max_len + 3, 40)
+
+        wb = Workbook()
+
+        INTERVIEW_TYPE_SHEETS = [("professional", "Entretiens PRO"), ("annual", "Entretiens Évaluation")]
+        interviews = Interview.objects.filter(
+            employee=employee, type__in=[t for t, _ in INTERVIEW_TYPE_SHEETS], created_at__gte=six_years_ago,
+        ).order_by("-created_at")
+        interviews_by_type = {}
+        for iv in interviews:
+            interviews_by_type.setdefault(iv.type, []).append(iv)
+
+        first_sheet = True
+        for iv_type, sheet_title in INTERVIEW_TYPE_SHEETS:
+            type_interviews = interviews_by_type.get(iv_type, [])
+            ws = wb.active if first_sheet else wb.create_sheet()
+            ws.title = sheet_title
+            first_sheet = False
+
+            questions_in_type = []
+            seen_qids = set()
+            for iv in type_interviews:
+                for section in iv.content.get("sections", []):
+                    for q in section.get("questions", []):
+                        qid = q.get("id", "")
+                        if qid and qid not in seen_qids:
+                            seen_qids.add(qid)
+                            questions_in_type.append((qid, q.get("label", qid)))
+
+            headers = ["Statut", "Date limite"] + [label for _qid, label in questions_in_type]
+            write_header(ws, headers)
+
+            for row_idx, iv in enumerate(type_interviews, 2):
+                answers = {}
+                for section in iv.content.get("sections", []):
+                    for q in section.get("questions", []):
+                        qid = q.get("id", "")
+                        answer = q.get("answer")
+                        if not qid:
+                            continue
+                        if q.get("type") == "rating":
+                            answers[qid] = str(answer) if answer is not None else ""
+                        elif q.get("type") == "table" and isinstance(answer, list):
+                            answers[qid] = "; ".join(
+                                " | ".join(str(c) for c in row) for row in answer if row
+                            )
+                        else:
+                            answers[qid] = str(answer) if answer else ""
+
+                row_data = [iv.get_status_display(), str(iv.due_date)]
+                row_data += [answers.get(qid, "") for qid, _label in questions_in_type]
+                write_row(ws, row_idx, row_data)
+
+            if type_interviews:
+                last_col = len(headers)
+                last_row = len(type_interviews) + 1
+                col_letter = chr(64 + last_col) if last_col <= 26 else "A"
+                ws.auto_filter.ref = f"A1:{col_letter}{last_row}"
+            autosize(ws)
+
+        ws = wb.create_sheet(title="Formations")
+        write_header(ws, ["Date", "Domaine", "Libellé", "Nature"])
+        formations = Formation.objects.filter(
+            employee=employee, date_formation__gte=six_years_ago.date()
+        ).order_by("-date_formation")
+        for row_idx, f in enumerate(formations, 2):
+            write_row(ws, row_idx, [str(f.date_formation) if f.date_formation else "", f.domaine, f.libelle, f.nature])
+        autosize(ws)
+
+        ws = wb.create_sheet(title="Augmentations")
+        write_header(ws, ["Date d'effet", "Montant"])
+        augmentations = Augmentation.objects.filter(
+            employee=employee, date_effet__gte=six_years_ago.date()
+        ).order_by("-date_effet")
+        for row_idx, a in enumerate(augmentations, 2):
+            write_row(ws, row_idx, [str(a.date_effet) if a.date_effet else "", str(a.montant) if a.montant is not None else ""])
+        autosize(ws)
+
+        ws = wb.create_sheet(title="Évolutions")
+        write_header(ws, ["Date d'effet", "Type", "Ancienne valeur", "Nouvelle valeur"])
+        evolutions = Evolution.objects.filter(
+            employee=employee, date_effet__gte=six_years_ago.date()
+        ).order_by("-date_effet")
+        for row_idx, e in enumerate(evolutions, 2):
+            write_row(ws, row_idx, [
+                str(e.date_effet) if e.date_effet else "",
+                e.get_type_evolution_display(),
+                e.ancienne_valeur,
+                e.nouvelle_valeur,
+            ])
+        autosize(ws)
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        filename = f"historique_{employee.last_name}_{employee.first_name}_6ans.xlsx".replace(" ", "_")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        wb.save(response)
+        return response
 
     @staticmethod
     def _parse_date(value):
@@ -367,6 +515,76 @@ class UserViewSet(viewsets.ModelViewSet):
                     matricule=matricule,
                     date_effet=date_effet,
                     montant=montant,
+                )
+                created += 1
+            except Exception as e:
+                errors.append(f"Ligne {row_num}: {e}")
+
+        return Response({"created": created, "errors": errors})
+
+    @action(detail=False, methods=["post"])
+    def import_evolutions(self, request):
+        """Import de masse d'evolutions historiques (poste/service/site/
+        statut/niveau/coefficient/salaire), colonnes CSV attendues :
+        Matricule, Type, Ancienne valeur, Nouvelle valeur, Date d'effet."""
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        import csv
+        import io
+        from datetime import datetime
+
+        valid_types = dict(Evolution.TypeEvolution.choices)
+
+        decoded = file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(decoded))
+        created = 0
+        errors = []
+
+        for row_num, row in enumerate(reader, start=2):
+            matricule = row.get("Matricule", "").strip()
+            if not matricule:
+                errors.append(f"Ligne {row_num}: Matricule manquant")
+                continue
+
+            employee = User.objects.filter(matricule=matricule).first()
+            if not employee:
+                errors.append(f"Ligne {row_num}: collaborateur matricule {matricule} introuvable")
+                continue
+
+            type_evolution = row.get("Type", "").strip().lower()
+            if type_evolution not in valid_types:
+                errors.append(
+                    f"Ligne {row_num}: type '{type_evolution}' invalide "
+                    f"(attendu: {', '.join(valid_types)})"
+                )
+                continue
+
+            try:
+                date_str = row.get("Date d'effet", "").strip()
+                date_effet = None
+                if date_str:
+                    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y"):
+                        try:
+                            date_effet = datetime.strptime(date_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+
+                Evolution.objects.create(
+                    employee=employee,
+                    type_evolution=type_evolution,
+                    ancienne_valeur=row.get("Ancienne valeur", "").strip(),
+                    nouvelle_valeur=row.get("Nouvelle valeur", "").strip(),
+                    date_effet=date_effet,
+                    auteur=request.user,
                 )
                 created += 1
             except Exception as e:

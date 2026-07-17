@@ -26,6 +26,51 @@ def sanitize_cell_value(value):
     return value
 
 
+BILAN_SOURCE_SECTIONS = [
+    ("objectifs", "bilan_objectifs_precedents", "Bilan des objectifs de l'année précédente"),
+    ("competences", "bilan_competences_precedentes", "Bilan des compétences de l'année précédente"),
+]
+
+
+def build_previous_year_bilan_sections(employee, interview_type):
+    """Pour un entretien annuel, reprend les objectifs/competences fixes
+    lors de l'entretien annuel precedent (par section id "objectifs" /
+    "competences" du template par defaut) et construit des sections de
+    bilan a evaluer (atteint/partiellement/non atteint + commentaire)."""
+    if interview_type != "annual":
+        return []
+
+    previous = (
+        Interview.objects.filter(employee=employee, type="annual", status__in=("completed", "signed"))
+        .order_by("-created_at")
+        .first()
+    )
+    if not previous:
+        return []
+
+    prev_sections_by_id = {s.get("id"): s for s in previous.content.get("sections", [])}
+
+    bilan_sections = []
+    for source_id, new_id, new_title in BILAN_SOURCE_SECTIONS:
+        source = prev_sections_by_id.get(source_id)
+        if not source or not source.get("questions"):
+            continue
+        questions = [
+            {
+                "id": f"bilan_{q.get('id')}",
+                "label": q.get("label", q.get("id")),
+                "type": "objectif_bilan",
+                "objectif_texte": q.get("answer") or "",
+                "answer": {"statut": "", "commentaire": ""},
+            }
+            for q in source["questions"]
+            if q.get("answer")
+        ]
+        if questions:
+            bilan_sections.append({"id": new_id, "title": new_title, "questions": questions})
+    return bilan_sections
+
+
 class InterviewPermission(permissions.BasePermission):
     def has_permission(self, request, view):
         if view.action == "stats":
@@ -120,6 +165,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         template = serializer.validated_data.get("template")
         employee = serializer.validated_data.get("employee")
+        interview_type = serializer.validated_data.get("type")
         content = serializer.validated_data.get("content")
         if not content:
             content = {}
@@ -135,6 +181,10 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 "coefficient": employee.coefficient,
                 "salaire_brut": str(employee.salaire_brut) if employee.salaire_brut else None,
             }
+        if employee and interview_type:
+            bilan_sections = build_previous_year_bilan_sections(employee, interview_type)
+            if bilan_sections:
+                content["sections"] = bilan_sections + list(content.get("sections", []))
         serializer.validated_data["content"] = content
         serializer.save(manager=self.request.user)
 
@@ -194,7 +244,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 iv.id,
                 iv.employee.get_full_name() or iv.employee.email,
                 iv.employee.email,
-                iv.manager.get_full_name() or iv.manager.email,
+                (iv.manager.get_full_name() or iv.manager.email) if iv.manager else "",
                 iv.get_type_display(),
                 iv.get_status_display(),
                 iv.due_date,
@@ -246,7 +296,21 @@ class InterviewViewSet(viewsets.ModelViewSet):
             "career": career,
             "training_history": training_history,
             "salary_history": salary_chrono,
+            "logo_data_uri": self._get_logo_data_uri(),
         }
+
+    _logo_data_uri_cache = None
+
+    @classmethod
+    def _get_logo_data_uri(cls):
+        if cls._logo_data_uri_cache is None:
+            import base64
+            import os
+
+            logo_path = os.path.join(os.path.dirname(__file__), "static", "interviews", "logo.png")
+            with open(logo_path, "rb") as f:
+                cls._logo_data_uri_cache = "data:image/png;base64," + base64.b64encode(f.read()).decode("ascii")
+        return cls._logo_data_uri_cache
 
     @action(detail=True, methods=["get"])
     def print(self, request, pk=None):
@@ -424,6 +488,10 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
         created = 0
         for user in qs:
+            sections = list(template.sections)
+            bilan_sections = build_previous_year_bilan_sections(user, template.type)
+            if bilan_sections:
+                sections = bilan_sections + sections
             _, was_created = Interview.objects.get_or_create(
                 campaign=campaign,
                 employee=user,
@@ -432,7 +500,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                     "template": template,
                     "template_snapshot": list(template.sections),
                     "content": {
-                        "sections": list(template.sections),
+                        "sections": sections,
                         "employee_snapshot": {
                             "position": user.position.name if user.position else None,
                             "service": user.service.name if user.service else None,
@@ -645,7 +713,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                     emp.site.name if emp.site else "",
                     emp.service.name if emp.service else "",
                     emp.position.name if emp.position else "",
-                    iv.manager.get_full_name() or iv.manager.email,
+                    (iv.manager.get_full_name() or iv.manager.email) if iv.manager else "",
                     iv.get_status_display(),
                     str(iv.due_date),
                 ]

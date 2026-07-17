@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Evolution, Notification, Position, Service, Site, User
+from .models import RH_ROLES, Evolution, Notification, Position, Service, Site, User
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -41,7 +41,7 @@ class UserSerializer(serializers.ModelSerializer):
             "sexe", "date_naissance", "telephone", "photo",
             "matricule", "hire_date", "date_sortie",
             "type_contrat", "statut", "coefficient", "niveau", "fonctionnement",
-            "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre",
+            "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre", "categorie_socio_pro",
             "service", "service_name",
             "position", "position_name",
             "site", "site_name",
@@ -56,7 +56,12 @@ class UserSerializer(serializers.ModelSerializer):
         return None
 
     def validate_role(self, value):
-        if value == "admin":
+        # Ne bloque que l'ESCALADE vers admin, pas la resoumission
+        # inchangee d'un compte deja admin — sinon toute modification
+        # (meme sans toucher au role) d'un utilisateur role="admin" via ce
+        # formulaire echoue, puisque le payload PUT resoumet toujours le
+        # role courant.
+        if value == "admin" and getattr(self.instance, "role", None) != "admin":
             raise serializers.ValidationError("Le rôle admin ne peut pas être attribué via ce formulaire")
         return value
 
@@ -96,7 +101,7 @@ class UserMeSerializer(serializers.ModelSerializer):
             "sexe", "date_naissance", "telephone", "photo",
             "matricule", "hire_date", "date_sortie",
             "type_contrat", "statut", "coefficient", "niveau", "fonctionnement",
-            "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre",
+            "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre", "categorie_socio_pro",
             "service", "service_name",
             "position", "position_name",
             "site", "site_name",

@@ -39,6 +39,7 @@ export interface User {
   forfait_jour: boolean;
   tickets_restaurant: boolean;
   cadre: boolean;
+  categorie_socio_pro: "" | "ouvrier" | "agent_maitrise" | "cadre";
 
   // Organisation
   service: number | null;
@@ -52,7 +53,6 @@ export interface User {
   agence_interim: string;
   icon: string;
   preferences: string;
-
 }
 
 export interface Campaign {
@@ -90,12 +90,18 @@ export interface TableColumn {
   type: "textarea" | "rating";
 }
 
+export interface ObjectifBilanAnswer {
+  statut: "" | "atteint" | "partiel" | "non_atteint";
+  commentaire: string;
+}
+
 export interface Question {
   id: string;
   label: string;
-  type: "textarea" | "rating" | "table" | "yesno";
-  answer?: string | number | boolean | null | (string | number | null)[][];
+  type: "textarea" | "rating" | "table" | "yesno" | "objectif_bilan";
+  answer?: string | number | boolean | null | (string | number | null)[][] | ObjectifBilanAnswer;
   columns?: TableColumn[];
+  objectif_texte?: string;
 }
 
 export interface Interview {
@@ -112,6 +118,7 @@ export interface Interview {
   type: "annual" | "professional" | "bilan" | "forfait" | "fin_carriere";
   status: "draft" | "in_progress" | "completed" | "signed" | "cancelled";
   due_date: string;
+  date_realisation: string | null;
   content: Record<string, unknown>;
   previous_content: Section[];
   career: CareerStep[];
@@ -170,3 +177,4 @@ export interface InterviewStats {
   overdue: number;
   upcoming: number;
 }
+
