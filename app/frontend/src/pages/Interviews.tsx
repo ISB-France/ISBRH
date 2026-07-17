@@ -52,6 +52,8 @@ export default function Interviews() {
   const [scope, setScope] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [year, setYear] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -103,9 +105,17 @@ export default function Interviews() {
 
   const displayed = useMemo(() => {
     if (!interviews) return interviews;
-    const filtered = showHistory && year
-      ? interviews.filter((iv) => iv.due_date.slice(0, 4) === year)
-      : interviews;
+    let filtered = interviews;
+    if (showHistory && year) {
+      filtered = filtered.filter((iv) => iv.due_date.slice(0, 4) === year);
+    }
+    if (!showHistory && (dateFrom || dateTo)) {
+      filtered = filtered.filter((iv) => {
+        if (dateFrom && iv.due_date < dateFrom) return false;
+        if (dateTo && iv.due_date > dateTo) return false;
+        return true;
+      });
+    }
     if (!sortField) return filtered;
     return [...filtered].sort((a, b) => {
       let cmp = 0;
@@ -118,7 +128,7 @@ export default function Interviews() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [interviews, sortField, sortDir, showHistory, year]);
+  }, [interviews, sortField, sortDir, showHistory, year, dateFrom, dateTo]);
 
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les entretiens" onRetry={refetch} />;
@@ -184,6 +194,29 @@ export default function Interviews() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
+        )}
+        {!showHistory && (
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">Date limite du</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            />
+            <label className="text-sm text-muted-foreground">au</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            />
+            {(dateFrom || dateTo) && (
+              <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); }}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         )}
         {selectedIds.length > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setShowBulkDeleteConfirm(true)}>
