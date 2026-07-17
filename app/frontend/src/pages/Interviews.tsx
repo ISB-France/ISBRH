@@ -226,12 +226,14 @@ export default function Interviews() {
                   onSelect={setDateRange}
                   defaultMonth={dateRange?.from}
                   modifiersClassNames={{
-                    range_start: "!bg-primary !text-primary-foreground rounded-l-full rounded-r-none",
-                    range_end: "!bg-primary !text-primary-foreground rounded-r-full rounded-l-none",
-                    range_middle: "!text-foreground rounded-none",
+                    range_start: "rounded-l-full rounded-r-none",
+                    range_end: "rounded-r-full rounded-l-none",
+                    range_middle: "rounded-none",
                   }}
                   modifiersStyles={{
-                    range_middle: { backgroundColor: "#fff2f2" },
+                    range_start: { backgroundColor: "#f6b8b8", color: "#7f1d1d" },
+                    range_end: { backgroundColor: "#f6b8b8", color: "#7f1d1d" },
+                    range_middle: { backgroundColor: "#fff2f2", color: "#7f1d1d" },
                   }}
                 />
               </PopoverContent>
