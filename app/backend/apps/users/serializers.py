@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import RH_ROLES, Evolution, Notification, Position, Service, Site, User
+from .models import Evolution, Notification, Position, Service, Site, User
 
 
 class NotificationSerializer(serializers.ModelSerializer):
