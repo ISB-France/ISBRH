@@ -226,9 +226,9 @@ export default function Interviews() {
                   onSelect={setDateRange}
                   defaultMonth={dateRange?.from}
                   modifiersClassNames={{
-                    range_start: "bg-primary text-primary-foreground rounded-md",
-                    range_end: "bg-primary text-primary-foreground rounded-md",
-                    range_middle: "bg-primary/15 text-foreground rounded-none underline decoration-primary decoration-2",
+                    range_start: "!bg-primary !text-primary-foreground rounded-l-full rounded-r-none",
+                    range_end: "!bg-primary !text-primary-foreground rounded-r-full rounded-l-none",
+                    range_middle: "!bg-accent !text-foreground rounded-none",
                   }}
                 />
               </PopoverContent>
