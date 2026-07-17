@@ -156,22 +156,6 @@ class UserViewSet(viewsets.ModelViewSet):
 
         return qs
 
-    @action(detail=True, methods=["post"])
-    def promote_to_admin(self, request, pk=None):
-        """Attribue le role admin (et is_superuser) a un compte existant.
-        Reserve aux admins actuels : c'est le seul flux applicatif (hors
-        /admin/ Django ou bootstrap ADMIN_EMAIL/ADMIN_PASSWORD) permettant
-        de creer un nouvel administrateur."""
-        if request.user.role != "admin":
-            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
-        user = self.get_object()
-        if user.role == "admin":
-            return Response({"error": "Cet utilisateur est déjà admin"}, status=status.HTTP_400_BAD_REQUEST)
-        user.is_superuser = True
-        user.role = "admin"
-        user.save(update_fields=["is_superuser", "role"])
-        return Response(UserSerializer(user).data)
-
     @action(detail=True, methods=["get"])
     def evolutions(self, request, pk=None):
         user = self.get_object()

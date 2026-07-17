@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, Upload, Download, Eye, EyeOff, ShieldPlus, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, Plus, Search, Upload, Download, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -10,7 +10,6 @@ import { Button } from "../components/ui/button";
 import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import ErrorScreen from "../components/ErrorScreen";
-import ConfirmDialog from "../components/ConfirmDialog";
 import { Toast, useToast } from "../components/Toast";
 import api from "../api";
 import type { User, Site } from "../types";
@@ -26,8 +25,6 @@ const roleLabel: Record<string, string> = {
 
 export default function Users() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [promoteTarget, setPromoteTarget] = useState<User | null>(null);
   const [managerId, setManagerId] = useState<string>("");
   const [siteId, setSiteId] = useState<string>("");
   const [searchInput, setSearchInput] = useState("");
@@ -142,19 +139,6 @@ export default function Users() {
     }
     setImporting(false);
     e.target.value = "";
-  };
-
-  const handlePromoteToAdmin = async () => {
-    if (!promoteTarget) return;
-    try {
-      await api.post(`/users/${promoteTarget.id}/promote_to_admin/`);
-      show(`${promoteTarget.first_name} ${promoteTarget.last_name} est maintenant admin`, "success");
-      queryClient.invalidateQueries({ queryKey: ["users"] });
-    } catch (err) {
-      console.error(err);
-      show("Impossible de promouvoir cet utilisateur", "error");
-    }
-    setPromoteTarget(null);
   };
 
   const handleExportHistory = async (u: User) => {
@@ -368,11 +352,6 @@ export default function Users() {
                           <Button variant="ghost" size="sm" title="Exporter l'historique (6 ans)" onClick={(e) => { e.stopPropagation(); handleExportHistory(u); }}>
                             <Download className="h-4 w-4" />
                           </Button>
-                          {currentUser?.role === "admin" && u.role !== "admin" && (
-                            <Button variant="ghost" size="sm" title="Promouvoir admin" onClick={(e) => { e.stopPropagation(); setPromoteTarget(u); }}>
-                              <ShieldPlus className="h-4 w-4" />
-                            </Button>
-                          )}
                         </div>
                       </td>
                     )}
@@ -383,16 +362,6 @@ export default function Users() {
           </table>
         </CardContent>
       </Card>
-      <ConfirmDialog
-        open={promoteTarget !== null}
-        title="Promouvoir administrateur"
-        message={promoteTarget ? `Donner les droits administrateur à ${promoteTarget.first_name} ${promoteTarget.last_name} ? Cette personne aura un accès complet à l'outil.` : ""}
-        confirmLabel="Promouvoir"
-        cancelLabel="Annuler"
-        onConfirm={handlePromoteToAdmin}
-        onCancel={() => setPromoteTarget(null)}
-      />
-
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AppLayout>
   );
