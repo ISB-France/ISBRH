@@ -118,7 +118,7 @@ export default function Profile() {
                     {icon ? `${icon} Changer d'icône` : "Choisir une icône"}
                   </Button>
                   {showIcons && (
-                    <div className="mt-2 grid grid-cols-8 gap-1 rounded-md border border-border p-2">
+                    <div className="mt-2 grid grid-cols-5 gap-1 rounded-md border border-border p-2 sm:grid-cols-8">
                       {EMOJIS.map((e) => (
                         <button
                           key={e}
@@ -190,7 +190,7 @@ export default function Profile() {
             <p className="text-xs text-muted-foreground">Choisissez la couleur principale du portail.</p>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-3">
+            <div className="grid grid-cols-4 gap-3 sm:grid-cols-7">
               {themes.map((t) => (
                 <button
                   key={t.id}
