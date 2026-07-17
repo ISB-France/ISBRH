@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, Plus, X, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { DateInput } from "../components/ui/date-input";
 import AppLayout from "../components/AppLayout";
 import api from "../api";
+import { formatDate } from "../lib/utils";
 import type { Site, Service, Position, User } from "../types";
 
 export default function UserForm() {
@@ -34,6 +36,7 @@ export default function UserForm() {
   const [forfaitJour, setForfaitJour] = useState(false);
   const [ticketsRestaurant, setTicketsRestaurant] = useState(false);
   const [cadre, setCadre] = useState(false);
+  const [categorieSocioPro, setCategorieSocioPro] = useState("");
 
   // Organisation
   const [role, setRole] = useState("employee");
@@ -43,7 +46,11 @@ export default function UserForm() {
   const [manager, setManager] = useState("");
   const [managerSearch, setManagerSearch] = useState("");
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
+  const managerFieldRef = useRef<HTMLDivElement>(null);
   const [agenceInterim, setAgenceInterim] = useState("");
+
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState("");
 
   // Inline creation states
   const [showNewService, setShowNewService] = useState(false);
@@ -70,10 +77,14 @@ export default function UserForm() {
     queryFn: () => api.get("/users/").then((r) => r.data),
   });
 
+  const managerRoles = ["manager", "stagiaire", "employee", "alternant"];
+
   const filteredManagers = allUsers?.filter((u) => {
     const q = managerSearch.toLowerCase();
     return (
       u.id !== Number(id) &&
+      u.statut === "actif" &&
+      managerRoles.includes(u.role) &&
       (`${u.first_name} ${u.last_name}`.toLowerCase().includes(q) ||
         u.email.toLowerCase().includes(q))
     );
@@ -81,9 +92,6 @@ export default function UserForm() {
 
   useEffect(() => {
     if (!id) {
-      api.get("/users/next_matricule/").then((r) => {
-        setMatricule(r.data.matricule);
-      });
       return;
     }
     api.get(`/users/${id}/`).then((r) => {
@@ -93,12 +101,12 @@ export default function UserForm() {
       setFirstName(d.first_name);
       setLastName(d.last_name);
       setSexe(d.sexe ?? "");
-      setDateNaissance(d.date_naissance ?? "");
+      setDateNaissance(formatDate(d.date_naissance));
       setTelephone(d.telephone ?? "");
 
       setMatricule(d.matricule ?? "");
-      setHireDate(d.hire_date ?? "");
-      setDateSortie(d.date_sortie ?? "");
+      setHireDate(formatDate(d.hire_date));
+      setDateSortie(formatDate(d.date_sortie));
       setTypeContrat(d.type_contrat ?? "");
       setStatut(d.statut ?? "actif");
       setCoefficient(d.coefficient ?? "");
@@ -106,6 +114,7 @@ export default function UserForm() {
       setForfaitJour(d.forfait_jour ?? false);
       setTicketsRestaurant(d.tickets_restaurant ?? false);
       setCadre(d.cadre ?? false);
+      setCategorieSocioPro(d.categorie_socio_pro ?? "");
 
       setRole(d.role);
       setService(d.service ?? "");
@@ -115,6 +124,17 @@ export default function UserForm() {
       setAgenceInterim(d.agence_interim ?? "");
     });
   }, [id]);
+
+  useEffect(() => {
+    if (!showManagerDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (managerFieldRef.current && !managerFieldRef.current.contains(e.target as Node)) {
+        setShowManagerDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showManagerDropdown]);
 
   // Inline creation handlers
   const handleCreateService = async () => {
@@ -137,18 +157,31 @@ export default function UserForm() {
     queryClient.invalidateQueries({ queryKey: ["positions"] });
   };
 
+  const toApiDate = (val: string) => {
+    const parts = val.split("/");
+    return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : val;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFieldErrors({});
+    setFormError("");
+
+    if (!/^\d{8}$/.test(matricule)) {
+      setFieldErrors({ matricule: "Le matricule doit être composé de 8 chiffres (ex. 00004521)." });
+      return;
+    }
+
     const payload = {
       email,
       first_name: firstName,
       last_name: lastName,
       sexe: sexe || "",
-      date_naissance: dateNaissance || null,
+      date_naissance: toApiDate(dateNaissance) || null,
       telephone,
       matricule,
-      hire_date: hireDate || null,
-      date_sortie: dateSortie || null,
+      hire_date: toApiDate(hireDate) || null,
+      date_sortie: toApiDate(dateSortie) || null,
       type_contrat: typeContrat || "",
       statut,
       coefficient,
@@ -156,6 +189,7 @@ export default function UserForm() {
       forfait_jour: forfaitJour,
       tickets_restaurant: ticketsRestaurant,
       cadre,
+      categorie_socio_pro: categorieSocioPro,
       role,
       service: service || null,
       position: position || null,
@@ -163,12 +197,34 @@ export default function UserForm() {
       manager: manager || null,
       agence_interim: agenceInterim,
     };
-    if (isEdit) {
-      await api.put(`/users/${id}/`, payload);
-    } else {
-      await api.post("/users/", payload);
+
+    try {
+      if (isEdit) {
+        await api.put(`/users/${id}/`, payload);
+      } else {
+        await api.post("/users/", payload);
+      }
+      navigate("/users");
+    } catch (err: unknown) {
+      if (err && typeof err === "object" && "response" in err) {
+        const axiosErr = err as { response?: { data?: Record<string, string[] | string> } };
+        const data = axiosErr.response?.data;
+        if (data && typeof data === "object") {
+          const nextFieldErrors: Record<string, string> = {};
+          for (const [key, value] of Object.entries(data)) {
+            nextFieldErrors[key] = Array.isArray(value) ? value.join(" ") : String(value);
+          }
+          setFieldErrors(nextFieldErrors);
+          setFormError(
+            nextFieldErrors.error ||
+              nextFieldErrors.detail ||
+              "Impossible d'enregistrer cet utilisateur."
+          );
+          return;
+        }
+      }
+      setFormError("Impossible d'enregistrer cet utilisateur.");
     }
-    navigate("/users");
   };
 
   const SelectField = ({
@@ -287,7 +343,7 @@ export default function UserForm() {
               ]} placeholder="" />
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date de naissance</label>
-                <Input type="date" value={dateNaissance} onChange={(e) => setDateNaissance(e.target.value)} />
+                <DateInput value={dateNaissance} onChange={setDateNaissance} />
               </div>
             </div>
             <div>
@@ -296,6 +352,57 @@ export default function UserForm() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Statut */}
+        {isEdit && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Statut</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Compte actif</p>
+                  <p className="text-xs text-muted-foreground">
+                    {statut === "actif"
+                      ? "L'utilisateur est actif et apparaît dans les sélections"
+                      : statut === "inactif"
+                        ? "L'utilisateur est inactif et n'apparaît plus dans les sélections (N+1, campagnes...)"
+                        : "L'utilisateur est sorti de l'entreprise"}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={statut === "actif" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setStatut("actif")}
+                  >
+                    Actif
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={statut === "inactif" ? "default" : "outline"}
+                    size="sm"
+                    className={statut === "inactif" ? "bg-orange-500 hover:bg-orange-600" : ""}
+                    onClick={() => setStatut("inactif")}
+                  >
+                    Inactif
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={statut === "sortie" ? "default" : "outline"}
+                    size="sm"
+                    className={statut === "sortie" ? "bg-red-500 hover:bg-red-600" : ""}
+                    onClick={() => setStatut("sortie")}
+                  >
+                    Sorti
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Contrat */}
         <Card>
@@ -306,17 +413,26 @@ export default function UserForm() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Matricule</label>
-                <Input value={matricule} disabled className="bg-muted" />
+                <Input
+                  value={matricule}
+                  onChange={(e) => setMatricule(e.target.value)}
+                  placeholder="00004521"
+                  maxLength={8}
+                  inputMode="numeric"
+                />
+                {fieldErrors.matricule && (
+                  <p className="mt-1 text-xs text-destructive">{fieldErrors.matricule}</p>
+                )}
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date d'embauche</label>
-                <Input type="date" value={hireDate} onChange={(e) => setHireDate(e.target.value)} />
+                <DateInput value={hireDate} onChange={setHireDate} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date de sortie</label>
-                <Input type="date" value={dateSortie} onChange={(e) => setDateSortie(e.target.value)} />
+                <DateInput value={dateSortie} onChange={setDateSortie} />
               </div>
               <SelectField label="Type de contrat" value={typeContrat} onChange={setTypeContrat} options={[
                 { value: "cdi", label: "CDI" },
@@ -326,20 +442,26 @@ export default function UserForm() {
                 { value: "stage", label: "Stage" },
               ]} placeholder="" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <SelectField label="Statut" value={statut} onChange={setStatut} options={[
-                { value: "actif", label: "Actif" },
-                { value: "inactif", label: "Inactif" },
-                { value: "sortie", label: "Sortie" },
-              ]} />
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">Coefficient</label>
-                <Input value={coefficient} onChange={(e) => setCoefficient(e.target.value)} />
-              </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Coefficient</label>
+              <Input value={coefficient} onChange={(e) => setCoefficient(e.target.value)} />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">Salaire brut mensuel</label>
               <Input type="number" step="0.01" value={salaireBrut} onChange={(e) => setSalaireBrut(e.target.value)} placeholder="0.00" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Catégorie socio-professionnelle</label>
+              <select
+                value={categorieSocioPro}
+                onChange={(e) => setCategorieSocioPro(e.target.value)}
+                className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
+              >
+                <option value="">—</option>
+                <option value="ouvrier">Ouvrier</option>
+                <option value="agent_maitrise">Agent de maîtrise</option>
+                <option value="cadre">Cadre</option>
+              </select>
             </div>
             <div className="flex flex-wrap gap-6">
               <label className="flex items-center gap-2 text-sm">
@@ -365,10 +487,9 @@ export default function UserForm() {
           </CardHeader>
           <CardContent className="space-y-4">
             <SelectField label="Rôle applicatif" value={role} onChange={setRole} options={[
-              { value: "admin", label: "Admin" },
               { value: "rh", label: "RH" },
               { value: "manager", label: "Manager" },
-              { value: "employee", label: "Employé" },
+              { value: "employee", label: "Collaborateur" },
               { value: "stagiaire", label: "Stagiaire" },
               { value: "alternant", label: "Alternant" },
             ]} />
@@ -407,16 +528,21 @@ export default function UserForm() {
                 ))}
               </select>
             </div>
-            <div className="relative">
+            <div className="relative" ref={managerFieldRef}>
               <label className="mb-1.5 block text-sm font-medium">N+1</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  value={managerSearch}
+                  value={
+                    manager
+                      ? `${allUsers?.find((u) => String(u.id) === manager)?.first_name ?? ""} ${allUsers?.find((u) => String(u.id) === manager)?.last_name ?? ""}`.trim()
+                      : managerSearch
+                  }
                   onChange={(e) => { setManagerSearch(e.target.value); setShowManagerDropdown(true); }}
                   onFocus={() => setShowManagerDropdown(true)}
                   placeholder="Rechercher un manager..."
                   className="pl-9"
+                  readOnly={Boolean(manager)}
                 />
               </div>
               {showManagerDropdown && (
@@ -472,6 +598,10 @@ export default function UserForm() {
             )}
           </CardContent>
         </Card>
+
+        {formError && (
+          <p className="text-center text-sm text-destructive">{formError}</p>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => navigate("/users")}>

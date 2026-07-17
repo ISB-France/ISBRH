@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, Upload } from "lucide-react";
+import { ArrowLeft, Plus, Search, Upload, Download, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -18,7 +18,7 @@ const roleLabel: Record<string, string> = {
   admin: "Admin",
   rh: "RH",
   manager: "Manager",
-  employee: "Employé",
+  employee: "Collaborateur",
   stagiaire: "Stagiaire",
   alternant: "Alternant",
 };
@@ -27,17 +27,38 @@ export default function Users() {
   const navigate = useNavigate();
   const [managerId, setManagerId] = useState<string>("");
   const [siteId, setSiteId] = useState<string>("");
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importType, setImportType] = useState<"users" | "formations" | "augmentations" | "collaborateurs" | "evolutions">("users");
   const { toast, show, setToast } = useToast();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearch(searchInput), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchInput]);
 
   const { data: currentUser } = useQuery<User>({
     queryKey: ["me"],
     queryFn: () => api.get("/auth/me/").then((r) => r.data),
   });
 
-  const { data: users, isLoading, error, refetch } = useQuery<User[]>({
-    queryKey: ["users", managerId, siteId, search],
+  const { data: users, isFetching, isLoading, error, refetch } = useQuery<User[]>({
+    queryKey: ["users", managerId, siteId, search, showInactive],
     queryFn: () =>
       api
         .get("/users/", {
@@ -45,10 +66,25 @@ export default function Users() {
             manager: managerId || undefined,
             site: siteId || undefined,
             search: search || undefined,
+            show_all_statuts: showInactive || undefined,
           },
         })
         .then((r) => r.data),
+    placeholderData: keepPreviousData,
   });
+
+  const displayed = useMemo(() => {
+    if (!users || !sortField) return users;
+    return [...users].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "user") {
+        const aName = `${a.first_name ?? ""} ${a.last_name ?? ""}`.trim();
+        const bName = `${b.first_name ?? ""} ${b.last_name ?? ""}`.trim();
+        cmp = aName.localeCompare(bName);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [users, sortField, sortDir]);
 
   const { data: allUsers } = useQuery<User[]>({
     queryKey: ["users-all"],
@@ -76,11 +112,28 @@ export default function Users() {
     setImporting(true);
     const form = new FormData();
     form.append("file", file);
+
+    const endpoints: Record<string, string> = {
+      users: "/users/import_kostango/",
+      formations: "/users/import_formations/",
+      augmentations: "/users/import_augmentations/",
+      collaborateurs: "/users/import_collaborateurs/",
+      evolutions: "/users/import_evolutions/",
+    };
+
+    const labels: Record<string, string> = {
+      users: "utilisateurs",
+      formations: "formations",
+      augmentations: "augmentations",
+      collaborateurs: "collaborateurs",
+      evolutions: "évolutions",
+    };
+
     try {
-      const resp = await api.post("/users/import_kostango/", form);
-      const msg = `${resp.data.created} utilisateurs importés${resp.data.errors?.length ? " — " + resp.data.errors.slice(0, 3).join(", ") + (resp.data.errors.length > 3 ? "..." : "") : ""}`;
+      const resp = await api.post(endpoints[importType], form);
+      const msg = `${resp.data.created} ${labels[importType]} importé(s)${resp.data.errors?.length ? " — " + resp.data.errors.slice(0, 3).join(", ") + (resp.data.errors.length > 3 ? "..." : "") : ""}`;
       show(msg, resp.data.errors?.length ? "error" : "success");
-      refetch();
+      if (importType === "users" || importType === "collaborateurs") refetch();
     } catch (err) {
       console.error(err);
     }
@@ -88,7 +141,17 @@ export default function Users() {
     e.target.value = "";
   };
 
-  if (isLoading) return <LoadingScreen />;
+  const handleExportHistory = async (u: User) => {
+    const res = await api.get(`/users/${u.id}/export_history_xlsx/`, { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `historique_${u.last_name}_${u.first_name}_6ans.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (isLoading && !users) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les utilisateurs" onRetry={refetch} />;
 
   return (
@@ -97,6 +160,17 @@ export default function Users() {
         <h1 className="font-display text-2xl font-bold">Utilisateurs</h1>
         {(currentUser?.role === "rh" || currentUser?.role === "admin") && (
           <div className="flex gap-2">
+            <select
+              value={importType}
+              onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations" | "collaborateurs" | "evolutions")}
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            >
+              <option value="users">Import utilisateurs</option>
+              <option value="collaborateurs">Import évolution professionnelle</option>
+              <option value="formations">Import formations</option>
+              <option value="augmentations">Import augmentations</option>
+              <option value="evolutions">Import évolutions (historique)</option>
+            </select>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
               <Upload className="h-4 w-4" />
               {importing ? "Import..." : "Importer"}
@@ -115,8 +189,8 @@ export default function Users() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Rechercher par nom, prénom, email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
@@ -132,6 +206,17 @@ export default function Users() {
             </option>
           ))}
         </select>
+        {(currentUser?.role === "rh" || currentUser?.role === "admin") && (
+          <Button
+            variant={showInactive ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setShowInactive(!showInactive)}
+          >
+            {showInactive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showInactive ? "Masquer inactifs" : "Afficher inactifs"}
+          </Button>
+        )}
       </div>
 
       {managerId && (
@@ -158,11 +243,25 @@ export default function Users() {
       )}
 
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 relative">
+          {isFetching && (
+            <div className="absolute right-4 top-4 z-10">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          )}
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase text-muted-foreground">
-                <th className="px-6 pb-3 pt-4">Utilisateur</th>
+                <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("user")}>
+                  <div className="flex items-center gap-1">
+                    Utilisateur
+                    {sortField === "user" ? (
+                      sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 pb-3 pt-4">Rôle</th>
                 <th className="px-6 pb-3 pt-4">Site</th>
                 <th className="px-6 pb-3 pt-4">Service</th>
@@ -180,7 +279,7 @@ export default function Users() {
                   </td>
                 </tr>
               )}
-              {users?.map((u) => {
+              {displayed?.map((u) => {
                 const subordinates = allUsers ? getAllDescendants(u.id, allUsers) : [];
                 const hasSubordinates = subordinates.length > 0;
                 const maxAvatars = 3;
@@ -189,7 +288,7 @@ export default function Users() {
                 return (
                   <tr
                     key={u.id}
-                    className={`border-b border-border last:border-0 ${hasSubordinates ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                    className={`border-b border-border last:border-0 ${hasSubordinates ? "cursor-pointer hover:bg-muted/50" : ""} ${u.statut !== "actif" ? "opacity-50" : ""}`}
                     onClick={() => hasSubordinates && setManagerId(String(u.id))}
                   >
                     <td className="px-6 py-3">
@@ -208,9 +307,17 @@ export default function Users() {
                       </div>
                     </td>
                     <td className="px-6 py-3">
-                      <Badge variant={u.role === "rh" || u.role === "admin" ? "default" : u.role === "manager" ? "secondary" : "outline"}>
-                        {roleLabel[u.role]}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant={u.role === "rh" || u.role === "admin" ? "default" : u.role === "manager" ? "secondary" : "outline"}>
+                          {roleLabel[u.role]}
+                        </Badge>
+                        {u.statut === "inactif" && (
+                          <Badge variant="outline" className="border-orange-300 text-orange-600">Inactif</Badge>
+                        )}
+                        {u.statut === "sortie" && (
+                          <Badge variant="outline" className="border-red-300 text-red-600">Sorti</Badge>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-3 text-sm">{u.site_name || "-"}</td>
                     <td className="px-6 py-3 text-sm">{u.service_name || "-"}</td>
@@ -238,9 +345,14 @@ export default function Users() {
                     </td>
                     {(currentUser?.role === "rh" || currentUser?.role === "admin") && (
                       <td className="px-6 py-3">
-                        <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/users/${u.id}/edit`); }}>
-                          Modifier
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/users/${u.id}/edit`); }}>
+                            Modifier
+                          </Button>
+                          <Button variant="ghost" size="sm" title="Exporter l'historique (6 ans)" onClick={(e) => { e.stopPropagation(); handleExportHistory(u); }}>
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </td>
                     )}
                   </tr>

@@ -5,8 +5,10 @@ import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { DateInput } from "../components/ui/date-input";
 import AppLayout from "../components/AppLayout";
 import api from "../api";
+import { formatDate } from "../lib/utils";
 import type { InterviewTemplate, Service, Site, User } from "../types";
 
 export default function CampaignForm() {
@@ -59,8 +61,8 @@ export default function CampaignForm() {
       setName(d.name);
       setTemplate(d.template ?? "");
       setDescription(d.description);
-      setStartDate(d.start_date);
-      setDueDate(d.due_date);
+      setStartDate(formatDate(d.start_date));
+      setDueDate(formatDate(d.due_date));
       const pf = d.population_filter || {};
       setFilterSite(pf.site ?? "");
       setFilterService(pf.service ?? "");
@@ -82,12 +84,16 @@ export default function CampaignForm() {
       if (filterService) population_filter.service = Number(filterService);
     }
 
+    const toApiDate = (val: string) => {
+      const parts = val.split("/");
+      return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : val;
+    };
     const payload = {
       name,
       template: Number(template) || null,
       description,
-      start_date: startDate,
-      due_date: dueDate,
+      start_date: toApiDate(startDate),
+      due_date: toApiDate(dueDate),
       population_filter,
     };
 
@@ -160,11 +166,11 @@ export default function CampaignForm() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date de début</label>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+                <DateInput value={startDate} onChange={setStartDate} required />
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date limite</label>
-                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+                <DateInput value={dueDate} onChange={setDueDate} required />
               </div>
             </div>
           </CardContent>
@@ -206,13 +212,13 @@ export default function CampaignForm() {
 
             <div>
               <label className="mb-1.5 block text-sm font-medium">
-                Ou sélectionner des employés spécifiques
+                Ou sélectionner des collaborateurs spécifiques
                 {selectedEmployees.length > 0 && (
                   <span className="ml-2 text-xs text-muted-foreground">({selectedEmployees.length} sélectionné{selectedEmployees.length > 1 ? "s" : ""})</span>
                 )}
               </label>
               <div className="max-h-48 overflow-y-auto rounded-md border border-border">
-                {allUsers?.map((u) => (
+                {allUsers?.filter((u) => u.statut === "actif").map((u) => (
                   <label key={u.id} className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-muted/50">
                     <input
                       type="checkbox"

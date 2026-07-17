@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Notification, Position, Service, Site, User
+from .models import Evolution, Notification, Position, Service, Site, User
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -40,8 +40,8 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "sexe", "date_naissance", "telephone", "photo",
             "matricule", "hire_date", "date_sortie",
-            "type_contrat", "statut", "coefficient",
-            "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre",
+            "type_contrat", "statut", "coefficient", "niveau", "fonctionnement",
+            "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre", "categorie_socio_pro",
             "service", "service_name",
             "position", "position_name",
             "site", "site_name",
@@ -55,9 +55,35 @@ class UserSerializer(serializers.ModelSerializer):
             return obj.manager.get_full_name() or obj.manager.email
         return None
 
+    def validate_role(self, value):
+        # Ne bloque que l'ESCALADE vers admin, pas la resoumission
+        # inchangee d'un compte deja admin — sinon toute modification
+        # (meme sans toucher au role) d'un utilisateur role="admin" via ce
+        # formulaire echoue, puisque le payload PUT resoumet toujours le
+        # role courant.
+        if value == "admin" and getattr(self.instance, "role", None) != "admin":
+            raise serializers.ValidationError("Le rôle admin ne peut pas être attribué via ce formulaire")
+        return value
+
     def create(self, validated_data):
         validated_data["username"] = validated_data["email"]
         return super().create(validated_data)
+
+
+class EvolutionSerializer(serializers.ModelSerializer):
+    auteur_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Evolution
+        fields = [
+            "id", "type_evolution", "ancienne_valeur", "nouvelle_valeur",
+            "date_effet", "auteur", "auteur_name", "created_at",
+        ]
+
+    def get_auteur_name(self, obj):
+        if obj.auteur:
+            return obj.auteur.get_full_name() or obj.auteur.email
+        return None
 
 
 class UserMeSerializer(serializers.ModelSerializer):
@@ -74,8 +100,8 @@ class UserMeSerializer(serializers.ModelSerializer):
             "role",
             "sexe", "date_naissance", "telephone", "photo",
             "matricule", "hire_date", "date_sortie",
-            "type_contrat", "statut", "coefficient",
-            "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre",
+            "type_contrat", "statut", "coefficient", "niveau", "fonctionnement",
+            "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre", "categorie_socio_pro",
             "service", "service_name",
             "position", "position_name",
             "site", "site_name",

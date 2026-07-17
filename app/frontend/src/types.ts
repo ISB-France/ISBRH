@@ -33,10 +33,13 @@ export interface User {
   type_contrat: "" | "cdi" | "cdd" | "interim" | "alternance" | "stage";
   statut: "actif" | "inactif" | "sortie";
   coefficient: string;
+  niveau: string;
+  fonctionnement: string;
   salaire_brut: number | null;
   forfait_jour: boolean;
   tickets_restaurant: boolean;
   cadre: boolean;
+  categorie_socio_pro: "" | "ouvrier" | "agent_maitrise" | "cadre";
 
   // Organisation
   service: number | null;
@@ -50,7 +53,6 @@ export interface User {
   agence_interim: string;
   icon: string;
   preferences: string;
-
 }
 
 export interface Campaign {
@@ -88,12 +90,18 @@ export interface TableColumn {
   type: "textarea" | "rating";
 }
 
+export interface ObjectifBilanAnswer {
+  statut: "" | "atteint" | "partiel" | "non_atteint";
+  commentaire: string;
+}
+
 export interface Question {
   id: string;
   label: string;
-  type: "textarea" | "rating" | "table";
-  answer?: string | number | null | (string | number | null)[][];
+  type: "textarea" | "rating" | "table" | "yesno" | "objectif_bilan";
+  answer?: string | number | boolean | null | (string | number | null)[][] | ObjectifBilanAnswer;
   columns?: TableColumn[];
+  objectif_texte?: string;
 }
 
 export interface Interview {
@@ -110,11 +118,48 @@ export interface Interview {
   type: "annual" | "professional" | "bilan" | "forfait" | "fin_carriere";
   status: "draft" | "in_progress" | "completed" | "signed" | "cancelled";
   due_date: string;
+  date_realisation: string | null;
   content: Record<string, unknown>;
   previous_content: Section[];
+  career: CareerStep[];
+  history: HistoryStep[];
+  training_history: TrainingEntry[];
+  salary_history: SalaryEntry[];
   document_url: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CareerStep {
+  date: string;
+  type: string;
+  type_label: string;
+  position: string | null;
+  service: string | null;
+  site: string | null;
+  coefficient: string | null;
+}
+
+export interface HistoryStep {
+  date: string;
+  type: string;
+  type_label: string;
+  status: string;
+  status_label: string;
+  manager_name: string;
+}
+
+export interface TrainingEntry {
+  date: string;
+  type: string;
+  entries: { label: string; answer: string }[];
+}
+
+export interface SalaryEntry {
+  date: string;
+  type: string;
+  salary: string | null;
+  coefficient: string | null;
 }
 
 export interface Notification {
@@ -132,3 +177,4 @@ export interface InterviewStats {
   overdue: number;
   upcoming: number;
 }
+

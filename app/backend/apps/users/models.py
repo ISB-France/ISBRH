@@ -1,7 +1,24 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager as BaseUserManager
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from .validators import validate_phone
+
+
+class UserManager(BaseUserManager):
+    def create_user(self, username=None, email=None, **extra_fields):
+        if not email:
+            raise ValueError("L'adresse email est obligatoire")
+        email = self.normalize_email(email)
+        username = username or email
+        return super().create_user(username=username, email=email, **extra_fields)
+
+    def create_superuser(self, username=None, email=None, **extra_fields):
+        if not email:
+            raise ValueError("L'adresse email est obligatoire")
+        email = self.normalize_email(email)
+        username = username or email
+        return super().create_superuser(username=username, email=email, **extra_fields)
 
 
 class Site(models.Model):
@@ -60,8 +77,13 @@ class User(AbstractUser):
         INACTIF = "inactif", "Inactif"
         SORTIE = "sortie", "Sortie"
 
+    class CategorieSocioPro(models.TextChoices):
+        OUVRIER = "ouvrier", "Ouvrier"
+        AGENT_MAITRISE = "agent_maitrise", "Agent de maîtrise"
+        CADRE = "cadre", "Cadre"
+
     email = models.EmailField(unique=True)
-    role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE)
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE, db_index=True)
 
     # Identité
     sexe = models.CharField(max_length=20, choices=Sexe.choices, blank=True)
@@ -74,14 +96,26 @@ class User(AbstractUser):
     # Contrat
     matricule = models.CharField(max_length=50, unique=True, blank=True)
     hire_date = models.DateField(null=True, blank=True)
-    date_sortie = models.DateField(null=True, blank=True)
-    type_contrat = models.CharField(max_length=20, choices=TypeContrat.choices, blank=True)
-    statut = models.CharField(max_length=20, choices=StatutEmploye.choices, default=StatutEmploye.ACTIF)
+    date_sortie = models.DateField(null=True, blank=True, db_index=True)
+    type_contrat = models.CharField(max_length=20, choices=TypeContrat.choices, blank=True, db_index=True)
+    statut = models.CharField(
+        max_length=20, choices=StatutEmploye.choices, default=StatutEmploye.ACTIF, db_index=True
+    )
     coefficient = models.CharField(max_length=20, blank=True)
+    niveau = models.CharField(max_length=50, blank=True)
+    fonctionnement = models.CharField(max_length=50, blank=True)
     salaire_brut = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     forfait_jour = models.BooleanField(default=False)
     tickets_restaurant = models.BooleanField(default=False)
     cadre = models.BooleanField(default=False)
+    # Categorie socio-professionnelle (ouvrier/agent de maitrise/cadre) :
+    # distincte de `statut` (actif/inactif/sortie, utilise pour les filtres
+    # RH) et de `cadre` (booleen paie existant). Vierge par defaut, a
+    # renseigner manuellement — affichee sur les entretiens a la place de
+    # `statut`, qui n'a pas de sens dans ce contexte.
+    categorie_socio_pro = models.CharField(
+        max_length=20, choices=CategorieSocioPro.choices, blank=True, db_index=True
+    )
 
     # Organisation
     service = models.ForeignKey(
@@ -109,10 +143,25 @@ class User(AbstractUser):
         default="pending",
     )
 
+    objects = UserManager()
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(role="admin") | models.Q(is_superuser=True),
+                name="role_admin_requires_superuser",
+            ),
+        ]
+
     def save(self, *args, **kwargs):
+        if self.role == self.Role.ADMIN and not self.is_superuser:
+            raise ValidationError(
+                "Le rôle admin ne peut être attribué qu'à un superutilisateur "
+                "(bootstrap ADMIN_EMAIL/ADMIN_PASSWORD ou /admin/ Django)."
+            )
         if not self.matricule:
             last = User.objects.filter(matricule__regex=r"^\d{8}$").order_by("matricule").last()
             if last:
@@ -127,6 +176,57 @@ class User(AbstractUser):
 
 
 RH_ROLES = ["admin", "rh"]
+
+
+class Formation(models.Model):
+    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name="formations")
+    matricule = models.CharField(max_length=50, blank=True)
+    domaine = models.CharField(max_length=255, blank=True)
+    libelle = models.CharField(max_length=255, blank=True)
+    date_formation = models.DateField(null=True, blank=True)
+    nature = models.CharField(max_length=50, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_formation"]
+
+
+class Augmentation(models.Model):
+    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name="augmentations")
+    matricule = models.CharField(max_length=50, blank=True)
+    date_effet = models.DateField(null=True, blank=True)
+    montant = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_effet"]
+
+
+class Evolution(models.Model):
+    class TypeEvolution(models.TextChoices):
+        POSTE = "poste", "Poste"
+        SERVICE = "service", "Service"
+        SITE = "site", "Site"
+        STATUT = "statut", "Statut"
+        NIVEAU = "niveau", "Niveau"
+        COEFFICIENT = "coefficient", "Coefficient"
+        SALAIRE = "salaire", "Salaire"
+
+    employee = models.ForeignKey(User, on_delete=models.PROTECT, related_name="evolutions")
+    type_evolution = models.CharField(max_length=20, choices=TypeEvolution.choices)
+    ancienne_valeur = models.CharField(max_length=255, blank=True)
+    nouvelle_valeur = models.CharField(max_length=255, blank=True)
+    date_effet = models.DateField(null=True, blank=True)
+    auteur = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="evolutions_creees"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date_effet", "-created_at"]
+
+    def __str__(self):
+        return f"{self.employee} - {self.type_evolution}: {self.ancienne_valeur} -> {self.nouvelle_valeur}"
 
 
 class Notification(models.Model):

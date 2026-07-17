@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Copy, Trash2 } from "lucide-react";
+import { Plus, Copy, Trash2, Upload } from "lucide-react";
+import { useRef } from "react";
+import { Toast, useToast } from "../components/Toast";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -25,6 +27,8 @@ export default function Templates() {
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const { toast, show, setToast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: templates, isLoading, error, refetch } = useQuery<InterviewTemplate[]>({
     queryKey: ["interview-templates"],
@@ -50,6 +54,18 @@ export default function Templates() {
     queryClient.invalidateQueries({ queryKey: ["interview-templates"] });
   };
 
+  const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    const res = await api.post("/interview-templates/import_csv/", form);
+    const msg = `${res.data.created} modèle(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
+    show(msg, res.data.errors?.length ? "error" : "success");
+    queryClient.invalidateQueries({ queryKey: ["interview-templates"] });
+    e.target.value = "";
+  };
+
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les modèles" onRetry={refetch} />;
 
@@ -57,10 +73,17 @@ export default function Templates() {
     <AppLayout>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Modèles d'entretien</h1>
-        <Button onClick={() => navigate("/templates/new")} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nouveau modèle
-        </Button>
+        <div className="flex gap-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
+            <Upload className="h-4 w-4" />
+            Importer CSV
+            <input ref={fileRef} type="file" accept=".csv" onChange={handleImportCsv} hidden />
+          </label>
+          <Button onClick={() => navigate("/templates/new")} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Nouveau modèle
+          </Button>
+        </div>
       </div>
 
       <div className="mb-4">
@@ -137,6 +160,7 @@ export default function Templates() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteId(null)}
       />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AppLayout>
   );
 }

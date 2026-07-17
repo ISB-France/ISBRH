@@ -1,0 +1,10 @@
+[run]
+source = apps
+omit =
+    */migrations/*
+    */tests.py
+    */test_integration.py
+
+[report]
+show_missing = True
+skip_covered = False

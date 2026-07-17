@@ -6,6 +6,8 @@ __pycache__/
 venv/
 env/
 *.egg
+.coverage
+htmlcov/
 
 # Django
 staticfiles/
@@ -39,4 +41,6 @@ Thumbs.db
 .docker/
 .env
 .env.*
+!deploy/.env.prod.example
+!deploy/.env.recette.example
 Export\ Kostango-*.csv

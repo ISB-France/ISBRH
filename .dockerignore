@@ -34,5 +34,4 @@ Thumbs.db
 *.swo
 
 # Deploy (not needed at build time)
-deploy/
 .github/

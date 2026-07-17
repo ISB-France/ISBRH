@@ -5,6 +5,7 @@ from django.shortcuts import redirect
 from django.utils.crypto import get_random_string
 import csv
 import io
+import logging
 
 from mozilla_django_oidc.utils import add_state_and_verifier_and_nonce_to_session
 from mozilla_django_oidc.views import OIDCAuthenticationRequestView as BaseRequestView
@@ -13,13 +14,17 @@ from mozilla_django_oidc.views import OIDCAuthenticationCallbackView as BaseCall
 from rest_framework import filters, generics, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.db import models as db_models
 
-from .models import RH_ROLES, Notification, Position, Service, Site, User
+from .models import RH_ROLES, Augmentation, Evolution, Formation, Notification, Position, Service, Site, User
+from .validators import validate_csv_upload
 from .serializers import (
+    EvolutionSerializer,
     NotificationSerializer,
     PositionSerializer,
     ServiceSerializer,
@@ -27,6 +32,8 @@ from .serializers import (
     UserMeSerializer,
     UserSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_subordinate_ids(user_id):
@@ -129,6 +136,10 @@ class UserViewSet(viewsets.ModelViewSet):
             else:
                 qs = qs.filter(id=user.id)
 
+        show_all_statuts = self.request.query_params.get("show_all_statuts")
+        if not show_all_statuts:
+            qs = qs.exclude(statut__in=("inactif", "sortie"))
+
         site = self.request.query_params.get("site")
         manager = self.request.query_params.get("manager")
         search = self.request.query_params.get("search")
@@ -142,9 +153,162 @@ class UserViewSet(viewsets.ModelViewSet):
                 | db_models.Q(last_name__icontains=search)
                 | db_models.Q(email__icontains=search)
             )
-            qs = qs.filter(manager_id=manager)
 
         return qs
+
+    @action(detail=True, methods=["get"])
+    def evolutions(self, request, pk=None):
+        user = self.get_object()
+        qs = Evolution.objects.filter(employee=user).order_by("date_effet", "created_at")
+        return Response(EvolutionSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=["get"])
+    def export_history_xlsx(self, request, pk=None):
+        """Export consolidé des données historisées d'un salarié sur les 6
+        dernières années : entretiens professionnels et d'évaluation
+        (contenu complet), formations, évolutions, augmentations."""
+        from datetime import timedelta
+
+        from django.http import HttpResponse
+        from django.utils import timezone
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+        from apps.interviews.models import Interview
+        from apps.interviews.views import sanitize_cell_value
+
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        employee = self.get_object()
+        six_years_ago = timezone.now() - timedelta(days=365.25 * 6)
+
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        thin_border = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin"),
+        )
+
+        def write_header(ws, headers):
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_idx, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = thin_border
+
+        def write_row(ws, row_idx, values):
+            for col_idx, val in enumerate(values, 1):
+                cell = ws.cell(row=row_idx, column=col_idx, value=sanitize_cell_value(val))
+                cell.border = thin_border
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+        def autosize(ws):
+            ws.freeze_panes = "A2"
+            for col_idx, col in enumerate(ws.columns, 1):
+                col_letter = chr(64 + col_idx) if col_idx <= 26 else "A"
+                max_len = max((len(str(c.value)) for c in col if c.value), default=0)
+                ws.column_dimensions[col_letter].width = min(max_len + 3, 40)
+
+        wb = Workbook()
+
+        INTERVIEW_TYPE_SHEETS = [("professional", "Entretiens PRO"), ("annual", "Entretiens Évaluation")]
+        interviews = Interview.objects.filter(
+            employee=employee, type__in=[t for t, _ in INTERVIEW_TYPE_SHEETS], created_at__gte=six_years_ago,
+        ).order_by("-created_at")
+        interviews_by_type = {}
+        for iv in interviews:
+            interviews_by_type.setdefault(iv.type, []).append(iv)
+
+        first_sheet = True
+        for iv_type, sheet_title in INTERVIEW_TYPE_SHEETS:
+            type_interviews = interviews_by_type.get(iv_type, [])
+            ws = wb.active if first_sheet else wb.create_sheet()
+            ws.title = sheet_title
+            first_sheet = False
+
+            questions_in_type = []
+            seen_qids = set()
+            for iv in type_interviews:
+                for section in iv.content.get("sections", []):
+                    for q in section.get("questions", []):
+                        qid = q.get("id", "")
+                        if qid and qid not in seen_qids:
+                            seen_qids.add(qid)
+                            questions_in_type.append((qid, q.get("label", qid)))
+
+            headers = ["Statut", "Date limite"] + [label for _qid, label in questions_in_type]
+            write_header(ws, headers)
+
+            for row_idx, iv in enumerate(type_interviews, 2):
+                answers = {}
+                for section in iv.content.get("sections", []):
+                    for q in section.get("questions", []):
+                        qid = q.get("id", "")
+                        answer = q.get("answer")
+                        if not qid:
+                            continue
+                        if q.get("type") == "rating":
+                            answers[qid] = str(answer) if answer is not None else ""
+                        elif q.get("type") == "table" and isinstance(answer, list):
+                            answers[qid] = "; ".join(
+                                " | ".join(str(c) for c in row) for row in answer if row
+                            )
+                        else:
+                            answers[qid] = str(answer) if answer else ""
+
+                row_data = [iv.get_status_display(), str(iv.due_date)]
+                row_data += [answers.get(qid, "") for qid, _label in questions_in_type]
+                write_row(ws, row_idx, row_data)
+
+            if type_interviews:
+                last_col = len(headers)
+                last_row = len(type_interviews) + 1
+                col_letter = chr(64 + last_col) if last_col <= 26 else "A"
+                ws.auto_filter.ref = f"A1:{col_letter}{last_row}"
+            autosize(ws)
+
+        ws = wb.create_sheet(title="Formations")
+        write_header(ws, ["Date", "Domaine", "Libellé", "Nature"])
+        formations = Formation.objects.filter(
+            employee=employee, date_formation__gte=six_years_ago.date()
+        ).order_by("-date_formation")
+        for row_idx, f in enumerate(formations, 2):
+            write_row(ws, row_idx, [str(f.date_formation) if f.date_formation else "", f.domaine, f.libelle, f.nature])
+        autosize(ws)
+
+        ws = wb.create_sheet(title="Augmentations")
+        write_header(ws, ["Date d'effet", "Montant"])
+        augmentations = Augmentation.objects.filter(
+            employee=employee, date_effet__gte=six_years_ago.date()
+        ).order_by("-date_effet")
+        for row_idx, a in enumerate(augmentations, 2):
+            write_row(ws, row_idx, [str(a.date_effet) if a.date_effet else "", str(a.montant) if a.montant is not None else ""])
+        autosize(ws)
+
+        ws = wb.create_sheet(title="Évolutions")
+        write_header(ws, ["Date d'effet", "Type", "Ancienne valeur", "Nouvelle valeur"])
+        evolutions = Evolution.objects.filter(
+            employee=employee, date_effet__gte=six_years_ago.date()
+        ).order_by("-date_effet")
+        for row_idx, e in enumerate(evolutions, 2):
+            write_row(ws, row_idx, [
+                str(e.date_effet) if e.date_effet else "",
+                e.get_type_evolution_display(),
+                e.ancienne_valeur,
+                e.nouvelle_valeur,
+            ])
+        autosize(ws)
+
+        response = HttpResponse(
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        filename = f"historique_{employee.last_name}_{employee.first_name}_6ans.xlsx".replace(" ", "_")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        wb.save(response)
+        return response
 
     @staticmethod
     def _parse_date(value):
@@ -166,6 +330,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -238,6 +405,291 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response({"created": created, "errors": errors, "total": len(reader)})
 
     @action(detail=False, methods=["post"])
+    def import_formations(self, request):
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import Formation
+        import csv
+        import io
+        from datetime import datetime
+
+        decoded = file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(decoded))
+
+        created = 0
+        errors = []
+
+        for row_num, row in enumerate(reader, start=2):
+            matricule = row.get("Matricule", "").strip()
+            if not matricule:
+                errors.append(f"Ligne {row_num}: Matricule manquant")
+                continue
+
+            employee = User.objects.filter(matricule=matricule).first()
+            if not employee:
+                errors.append(f"Ligne {row_num}: collaborateur matricule {matricule} introuvable")
+                continue
+
+            try:
+                date_str = row.get("DATE DE FORMATION", "").strip()
+                date_formation = None
+                if date_str:
+                    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y"):
+                        try:
+                            date_formation = datetime.strptime(date_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+
+                Formation.objects.create(
+                    employee=employee,
+                    matricule=matricule,
+                    domaine=row.get("DOMAINE", "").strip(),
+                    libelle=row.get("Libellé formation", "").strip(),
+                    date_formation=date_formation,
+                    nature=row.get("NATURE DE LA FORMATION", "").strip(),
+                )
+                created += 1
+            except Exception as e:
+                errors.append(f"Ligne {row_num}: {e}")
+
+        return Response({"created": created, "errors": errors})
+
+    @action(detail=False, methods=["post"])
+    def import_augmentations(self, request):
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import Augmentation
+        import csv
+        import io
+        from datetime import datetime
+
+        decoded = file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(decoded))
+        created = 0
+        errors = []
+
+        for row_num, row in enumerate(reader, start=2):
+            matricule = row.get("Matricule", "").strip()
+            if not matricule:
+                errors.append(f"Ligne {row_num}: Matricule manquant")
+                continue
+
+            employee = User.objects.filter(matricule=matricule).first()
+            if not employee:
+                errors.append(f"Ligne {row_num}: collaborateur matricule {matricule} introuvable")
+                continue
+
+            try:
+                date_str = row.get("Date", "").strip()
+                date_effet = None
+                if date_str:
+                    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y"):
+                        try:
+                            date_effet = datetime.strptime(date_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+
+                montant_str = row.get("Montant Augmentation", "").strip().replace(",", ".")
+                montant = float(montant_str) if montant_str else None
+
+                Augmentation.objects.create(
+                    employee=employee,
+                    matricule=matricule,
+                    date_effet=date_effet,
+                    montant=montant,
+                )
+                created += 1
+            except Exception as e:
+                errors.append(f"Ligne {row_num}: {e}")
+
+        return Response({"created": created, "errors": errors})
+
+    @action(detail=False, methods=["post"])
+    def import_evolutions(self, request):
+        """Import de masse d'evolutions historiques (poste/service/site/
+        statut/niveau/coefficient/salaire), colonnes CSV attendues :
+        Matricule, Type, Ancienne valeur, Nouvelle valeur, Date d'effet."""
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        import csv
+        import io
+        from datetime import datetime
+
+        valid_types = dict(Evolution.TypeEvolution.choices)
+
+        decoded = file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(decoded))
+        created = 0
+        errors = []
+
+        for row_num, row in enumerate(reader, start=2):
+            matricule = row.get("Matricule", "").strip()
+            if not matricule:
+                errors.append(f"Ligne {row_num}: Matricule manquant")
+                continue
+
+            employee = User.objects.filter(matricule=matricule).first()
+            if not employee:
+                errors.append(f"Ligne {row_num}: collaborateur matricule {matricule} introuvable")
+                continue
+
+            type_evolution = row.get("Type", "").strip().lower()
+            if type_evolution not in valid_types:
+                errors.append(
+                    f"Ligne {row_num}: type '{type_evolution}' invalide "
+                    f"(attendu: {', '.join(valid_types)})"
+                )
+                continue
+
+            try:
+                date_str = row.get("Date d'effet", "").strip()
+                date_effet = None
+                if date_str:
+                    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y"):
+                        try:
+                            date_effet = datetime.strptime(date_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+
+                Evolution.objects.create(
+                    employee=employee,
+                    type_evolution=type_evolution,
+                    ancienne_valeur=row.get("Ancienne valeur", "").strip(),
+                    nouvelle_valeur=row.get("Nouvelle valeur", "").strip(),
+                    date_effet=date_effet,
+                    auteur=request.user,
+                )
+                created += 1
+            except Exception as e:
+                errors.append(f"Ligne {row_num}: {e}")
+
+        return Response({"created": created, "errors": errors})
+
+    @action(detail=False, methods=["post"])
+    def import_collaborateurs(self, request):
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        decoded = file.read().decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(decoded))
+
+        created = 0
+        updated = 0
+        errors = []
+
+        for row_num, row in enumerate(reader, start=2):
+            matricule = row.get("Matricule", "").strip()
+            if not matricule:
+                errors.append(f"Ligne {row_num}: Matricule manquant")
+                continue
+
+            try:
+                first_name = row.get("Prénom", "").strip().capitalize()
+                last_name = row.get("Nom", "").strip().upper()
+                date_naissance = self._parse_date(row.get("Date de naissance", "").strip())
+                date_entree = self._parse_date(row.get("Date d'entrée", "").strip())
+
+                statut = row.get("Statut", "").strip().lower()
+                if statut not in ("actif", "inactif", "sortie"):
+                    statut = "actif"
+
+                niveau = row.get("Niveau", "").strip()
+                coefficient = row.get("Coefficient", "").strip()
+
+                position_name = row.get("Poste", "").strip()
+                position = None
+                if position_name:
+                    position, _ = Position.objects.get_or_create(name=position_name)
+
+                fonctionnement = row.get("Fonctionnement", "").strip()
+
+                user, created_flag = User.objects.get_or_create(
+                    matricule=matricule,
+                    defaults={
+                        "username": f"collab_{matricule}",
+                        "email": f"{matricule}@collaborateur.isb.fr",
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "role": "employee",
+                        "date_naissance": date_naissance,
+                        "hire_date": date_entree,
+                        "statut": statut,
+                        "niveau": niveau,
+                        "coefficient": coefficient,
+                        "position": position,
+                        "fonctionnement": fonctionnement,
+                    },
+                )
+                if created_flag:
+                    logger.warning(
+                        "Aucun utilisateur trouvé pour le matricule %s, "
+                        "création avec email temporaire (%s)",
+                        matricule,
+                        user.email,
+                    )
+                    user.set_unusable_password()
+                    user.save()
+                    created += 1
+                else:
+                    changed = False
+                    for f, v in [
+                        ("first_name", first_name),
+                        ("last_name", last_name),
+                        ("date_naissance", date_naissance),
+                        ("hire_date", date_entree),
+                        ("statut", statut),
+                        ("niveau", niveau),
+                        ("coefficient", coefficient),
+                        ("position", position),
+                        ("fonctionnement", fonctionnement),
+                    ]:
+                        if getattr(user, f) != v:
+                            setattr(user, f, v)
+                            changed = True
+                    if changed:
+                        user.save()
+                        updated += 1
+
+            except Exception as e:
+                errors.append(f"Ligne {row_num} (matricule {matricule}): {e}")
+
+        return Response({"created": created, "updated": updated, "errors": errors})
+
+    @action(detail=False, methods=["post"])
     def import_kostango(self, request):
         if request.user.role not in RH_ROLES:
             return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
@@ -245,6 +697,9 @@ class UserViewSet(viewsets.ModelViewSet):
         file = request.FILES.get("file")
         if not file:
             return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
 
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
@@ -542,10 +997,115 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"status": "ok"})
 
 
-class DevLoginView(APIView):
+class SSOLoginView(APIView):
+    """
+    Valide un token SSO émis par ISBibliotheque.
+    POST /api/auth/sso/  { "token": "<uuid>" }
+    Appelle ISBibliotheque POST /api/sso/consume, récupère l'utilisateur,
+    crée/met à jour le compte local, retourne les tokens JWT.
+    """
     permission_classes = [permissions.AllowAny]
 
     def post(self, request):
+        import requests as http_requests
+        from django.contrib.auth import get_user_model
+
+        UserModel = get_user_model()
+
+        token = request.data.get("token", "").strip()
+        if not token:
+            return Response({"error": "Token manquant"}, status=status.HTTP_400_BAD_REQUEST)
+
+        biblio_url = getattr(settings, "ISBIBLIOTHEQUE_URL", "").rstrip("/")
+        if not biblio_url:
+            return Response({"error": "ISBIBLIOTHEQUE_URL non configurée"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            resp = http_requests.post(
+                f"{biblio_url}/api/sso/consume",
+                json={"token": token},
+                timeout=10,
+            )
+        except http_requests.exceptions.RequestException as e:
+            return Response({"error": f"Impossible de joindre ISBibliotheque : {e}"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("SSO consume response: status=%s body=%s", resp.status_code, resp.text[:500])
+
+        if resp.status_code in (401, 404, 410):
+            return Response({"error": "Token SSO invalide ou expiré"}, status=status.HTTP_401_UNAUTHORIZED)
+        if not resp.ok:
+            return Response({"error": f"Erreur ISBibliotheque (HTTP {resp.status_code}): {resp.text[:200]}"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        data = resp.json()
+        user_data = data.get("user") or data
+        email = (user_data.get("email") or "").strip().lower()
+        name = user_data.get("name") or ""
+        roles = user_data.get("roles") or []
+        is_admin = user_data.get("isAdmin") or False
+
+        if not email:
+            return Response({"error": "Email manquant dans la réponse SSO"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        # Déduire le rôle interne
+        role_map = {"rh": "rh", "admin": "admin", "manager": "manager"}
+        internal_role = "employee"
+        if is_admin:
+            internal_role = "admin"
+        else:
+            for r in roles:
+                if r in role_map:
+                    internal_role = role_map[r]
+                    break
+
+        # Prénom / nom
+        parts = name.split(" ", 1)
+        first_name = parts[0] if parts else ""
+        last_name = parts[1] if len(parts) > 1 else ""
+
+        user, created = UserModel.objects.get_or_create(
+            email=email,
+            defaults={
+                "username": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "role": internal_role,
+                "is_active": True,
+            },
+        )
+        if not created:
+            # Mettre à jour les infos si l'utilisateur existe déjà
+            updated = False
+            if first_name and user.first_name != first_name:
+                user.first_name = first_name
+                updated = True
+            if last_name and user.last_name != last_name:
+                user.last_name = last_name
+                updated = True
+            if updated:
+                user.save(update_fields=["first_name", "last_name"])
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserMeSerializer(user).data,
+        })
+
+
+class DevLoginThrottle(AnonRateThrottle):
+    scope = "dev_login"
+
+
+class DevLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [DevLoginThrottle]
+
+    def post(self, request):
+        if not settings.DEBUG:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
         from django.contrib.auth import authenticate
 
         email = request.data.get("email", "").strip().lower()
@@ -567,11 +1127,11 @@ class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        try:
-            refresh_token = request.data.get("refresh")
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-        except Exception:
-            pass
+        refresh_token = request.data.get("refresh")
+        if refresh_token:
+            try:
+                RefreshToken(refresh_token).blacklist()
+            except TokenError:
+                # Token deja invalide/expire/blackliste : rien de plus a faire.
+                pass
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -29,7 +29,7 @@ class UserAdmin(BaseUserAdmin):
     fieldsets = (
         (None, {"fields": ("email", "password")}),
         ("Identité", {"fields": ("first_name", "last_name", "sexe", "date_naissance", "telephone", "photo")}),
-        ("Contrat", {"fields": ("matricule", "hire_date", "date_sortie", "type_contrat", "statut", "coefficient", "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre")}),
+        ("Contrat", {"fields": ("matricule", "hire_date", "date_sortie", "type_contrat", "statut", "categorie_socio_pro", "niveau", "coefficient", "fonctionnement", "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre")}),
         ("Organisation", {"fields": ("role", "service", "position", "site", "manager", "agence_interim")}),
         ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
         ("Dates", {"fields": ("last_login", "date_joined")}),

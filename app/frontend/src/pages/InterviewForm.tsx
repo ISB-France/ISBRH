@@ -4,9 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import { Select } from "../components/ui/select";
 import AppLayout from "../components/AppLayout";
+import { DateInput } from "../components/ui/date-input";
 import api from "../api";
+import { formatDate } from "../lib/utils";
 import type { InterviewTemplate, User } from "../types";
 
 export default function InterviewForm() {
@@ -41,18 +43,22 @@ export default function InterviewForm() {
       setType(r.data.type);
       setTemplate(r.data.template ?? "");
       setStatus(r.data.status);
-      setDueDate(r.data.due_date);
+      setDueDate(formatDate(r.data.due_date));
     });
   }, [id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const selectedTemplate = templates?.find((t) => String(t.id) === template);
+    const toApiDate = (val: string) => {
+      const parts = val.split("/");
+      return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : val;
+    };
     const payload: Record<string, unknown> = {
       employee: Number(employee),
       type: selectedTemplate?.type || type,
       status,
-      due_date: dueDate,
+      due_date: toApiDate(dueDate),
       content: {},
     };
     if (template) payload.template = Number(template);
@@ -82,12 +88,11 @@ export default function InterviewForm() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Employé</label>
-              <select
+              <label className="mb-1.5 block text-sm font-medium">Collaborateur</label>
+              <Select
                 value={employee}
                 onChange={(e) => setEmployee(e.target.value)}
                 required
-                className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
               >
                 <option value="">Sélectionner...</option>
                 {employees?.map((u) => (
@@ -95,14 +100,13 @@ export default function InterviewForm() {
                     {u.first_name} {u.last_name} ({u.email})
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">Type d'entretien</label>
-              <select
+              <Select
                 value={type}
                 onChange={(e) => { setType(e.target.value); setTemplate(""); }}
-                className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
               >
                 <option value="">Sélectionner...</option>
                 <option value="annual">Évaluation</option>
@@ -110,14 +114,13 @@ export default function InterviewForm() {
                 <option value="bilan">Bilan</option>
                 <option value="forfait">Forfait jours</option>
                 <option value="fin_carriere">Fin de carrière</option>
-              </select>
+              </Select>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium">Modèle</label>
-              <select
+              <Select
                 value={template}
                 onChange={(e) => setTemplate(e.target.value)}
-                className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
               >
                 <option value="">{type ? "Sélectionner un modèle..." : "Sélectionnez d'abord un type"}</option>
                 {filteredTemplates?.map((t) => (
@@ -125,26 +128,25 @@ export default function InterviewForm() {
                     {t.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             {isEdit && (
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Statut</label>
-                <select
+                <Select
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
                 >
                   <option value="draft">Brouillon</option>
                   <option value="in_progress">En cours</option>
                   <option value="completed">Terminé</option>
                   <option value="cancelled">Annulé</option>
-                </select>
+                </Select>
               </div>
             )}
             <div>
               <label className="mb-1.5 block text-sm font-medium">Date limite</label>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required />
+              <DateInput value={dueDate} onChange={setDueDate} required />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => navigate("/interviews")}>

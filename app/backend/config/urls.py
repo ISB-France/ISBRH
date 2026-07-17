@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
-from apps.users.views import OIDCAuthenticationRequestView, OIDCCallbackView, MeView, UserViewSet, SiteViewSet, ServiceViewSet, PositionViewSet, NotificationViewSet, DevLoginView, LogoutView, ProfileAvatarView
+from apps.users.views import OIDCAuthenticationRequestView, OIDCCallbackView, MeView, UserViewSet, SiteViewSet, ServiceViewSet, PositionViewSet, NotificationViewSet, DevLoginView, LogoutView, ProfileAvatarView, SSOLoginView
 from apps.interviews.views import CampaignViewSet, InterviewTemplateViewSet, InterviewViewSet
 
 router = DefaultRouter()
@@ -22,6 +22,7 @@ urlpatterns = [
     path("api/auth/verify/", TokenVerifyView.as_view(), name="token_verify"),
     path("api/auth/me/", MeView.as_view(), name="auth_me"),
     path("api/auth/profile/avatar/", ProfileAvatarView.as_view(), name="auth_profile_avatar"),
+    path("api/auth/sso/", SSOLoginView.as_view(), name="auth_sso"),
     path("api/auth/dev-login/", DevLoginView.as_view(), name="auth_dev_login"),
     path("api/auth/logout/", LogoutView.as_view(), name="auth_logout"),
     path("api/services/", ServiceViewSet.as_view({"get": "list", "post": "create"}), name="service-list"),
@@ -29,13 +30,19 @@ urlpatterns = [
     path("api/positions/", PositionViewSet.as_view({"get": "list", "post": "create"}), name="position-list"),
     path("api/positions/<int:pk>/", PositionViewSet.as_view({"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}), name="position-detail"),
     path("api/interview-templates/", InterviewTemplateViewSet.as_view({"get": "list", "post": "create"}), name="interviewtemplate-list"),
+    path("api/interview-templates/import_csv/", InterviewTemplateViewSet.as_view({"post": "import_csv"}), name="interviewtemplate-import-csv"),
     path("api/interview-templates/<int:pk>/", InterviewTemplateViewSet.as_view({"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}), name="interviewtemplate-detail"),
     path("api/notifications/", NotificationViewSet.as_view({"get": "list"}), name="notification-list"),
     path("api/notifications/<int:pk>/mark-read/", NotificationViewSet.as_view({"post": "mark_read"}), name="notification-mark-read"),
     path("api/notifications/mark-all-read/", NotificationViewSet.as_view({"post": "mark_all_read"}), name="notification-mark-all-read"),
     path("api/campaigns/", CampaignViewSet.as_view({"get": "list", "post": "create"}), name="campaign-list"),
+    path("api/campaigns/export_xlsx/", CampaignViewSet.as_view({"get": "export_xlsx"}), name="campaign-export-xlsx"),
+    path("api/campaigns/export_all_contents_xlsx/", CampaignViewSet.as_view({"get": "export_all_contents_xlsx"}), name="campaign-export-all-contents-xlsx"),
     path("api/campaigns/<int:pk>/", CampaignViewSet.as_view({"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}), name="campaign-detail"),
     path("api/campaigns/<int:pk>/generate/", CampaignViewSet.as_view({"post": "generate"}), name="campaign-generate"),
+    path("api/campaigns/<int:pk>/delete_all_interviews/", CampaignViewSet.as_view({"post": "delete_all_interviews"}), name="campaign-delete-all-interviews"),
+    path("api/campaigns/<int:pk>/reassign_managers/", CampaignViewSet.as_view({"post": "reassign_managers"}), name="campaign-reassign-managers"),
+    path("api/campaigns/<int:pk>/export_contents_xlsx/", CampaignViewSet.as_view({"get": "export_contents_xlsx"}), name="campaign-export-contents-xlsx"),
     path("api/", include(router.urls)),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

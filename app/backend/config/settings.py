@@ -2,11 +2,25 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "insecure-dev-key-change-in-prod")
+INSECURE_DEFAULT_SECRET_KEY = "insecure-dev-key-change-in-prod"
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", INSECURE_DEFAULT_SECRET_KEY)
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
+
+if not DEBUG:
+    if SECRET_KEY == INSECURE_DEFAULT_SECRET_KEY:
+        raise ImproperlyConfigured(
+            "DJANGO_SECRET_KEY doit être défini explicitement quand DEBUG=False."
+        )
+    if ALLOWED_HOSTS == ["*"]:
+        raise ImproperlyConfigured(
+            "ALLOWED_HOSTS doit être défini explicitement quand DEBUG=False."
+        )
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -16,6 +30,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "mozilla_django_oidc",
     "apps.users",
@@ -67,8 +82,10 @@ AUTH_USER_MODEL = "users.User"
 
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
-    "apps.users.backends.OIDCAuthenticationBackend",
 ]
+
+if os.environ.get("OIDC_CLIENT_ID") and os.environ.get("OIDC_OP_JWKS_ENDPOINT"):
+    AUTHENTICATION_BACKENDS.append("apps.users.backends.OIDCAuthenticationBackend")
 
 OIDC_RP_CLIENT_ID = os.environ.get("OIDC_CLIENT_ID")
 OIDC_RP_CLIENT_SECRET = os.environ.get("OIDC_CLIENT_SECRET")
@@ -77,6 +94,7 @@ OIDC_OP_TOKEN_ENDPOINT = os.environ.get("OIDC_OP_TOKEN_ENDPOINT")
 OIDC_OP_USER_ENDPOINT = os.environ.get("OIDC_OP_USER_ENDPOINT")
 OIDC_OP_JWKS_ENDPOINT = os.environ.get("OIDC_OP_JWKS_ENDPOINT")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5175")
+ISBIBLIOTHEQUE_URL = os.environ.get("ISBIBLIOTHEQUE_URL", "")
 OIDC_REDIRECT_URI = os.environ.get("OIDC_REDIRECT_URI")
 OIDC_RP_SCOPES = "openid email profile"
 OIDC_RP_SIGN_ALGO = "RS256"
@@ -97,6 +115,9 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": (
         "rest_framework.renderers.JSONRenderer",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "dev_login": "5/min",
+    },
 }
 
 SIMPLE_JWT = {
@@ -110,6 +131,7 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 CORS_ALLOW_CREDENTIALS = True
+CORS_EXPOSE_HEADERS = ["Content-Disposition"]
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -134,6 +156,10 @@ LOGGING = {
         "apps.users.backends": {
             "handlers": ["console"],
             "level": "INFO",
+        },
+        "apps.users.views": {
+            "handlers": ["console"],
+            "level": "WARNING",
         },
     },
 }

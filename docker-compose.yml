@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${DB_NAME:-isboard}
-      POSTGRES_USER: ${DB_USER:-isboard}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-isboard}
+      POSTGRES_DB: isboard
+      POSTGRES_USER: isboard
+      POSTGRES_PASSWORD: isboard
     ports:
       - "5434:5432"
     volumes:

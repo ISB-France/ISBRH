@@ -1,15 +1,16 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 
-interface ColorTheme {
+// --- Thèmes clairs : dérivés d'une seule teinte via applyTheme(hue). ---
+export interface LightColorTheme {
   id: string;
   label: string;
-  icon: string;
+  icon: string; // emoji
   hue: number;
-  dark: boolean;
+  dark: false;
 }
 
-export const THEMES: ColorTheme[] = [
+export const LIGHT_THEMES: LightColorTheme[] = [
   { id: "isb", label: "ISB", icon: "🟤", hue: 36, dark: false },
   { id: "blue", label: "Bleu", icon: "🔵", hue: 220, dark: false },
   { id: "green", label: "Vert", icon: "🟢", hue: 142, dark: false },
@@ -17,14 +18,30 @@ export const THEMES: ColorTheme[] = [
   { id: "red", label: "Rouge", icon: "🔴", hue: 0, dark: false },
   { id: "teal", label: "Teal", icon: "🩵", hue: 180, dark: false },
   { id: "pink", label: "Rose", icon: "🩷", hue: 330, dark: false },
-  { id: "slate", label: "Ardoise", icon: "🌑", hue: 220, dark: true },
-  { id: "midnight", label: "Minuit", icon: "🌃", hue: 240, dark: true },
-  { id: "charcoal", label: "Charbon", icon: "⚫", hue: 30, dark: true },
-  { id: "forest", label: "Forêt", icon: "🌲", hue: 140, dark: true },
-  { id: "plum", label: "Prune", icon: "🍇", hue: 280, dark: true },
-  { id: "navy", label: "Marine", icon: "⚓", hue: 220, dark: true },
-  { id: "wine", label: "Vin", icon: "🍷", hue: 350, dark: true },
 ];
+
+export type ColorTheme = LightColorTheme;
+
+export const THEMES: ColorTheme[] = LIGHT_THEMES;
+
+// Anciens thèmes sombres, supprimés — un id stocké correspondant à l'un
+// d'eux doit basculer proprement sur le thème clair par défaut plutôt que
+// d'échouer silencieusement ou de planter.
+const OLD_DARK_THEME_IDS = [
+  "slate", "midnight", "charcoal", "forest", "plum", "navy", "wine",
+  "neon-blue", "cyber-purple", "minimal-graphite", "emerald-dark",
+  "amber-night", "crimson-dark", "glass-dark",
+];
+const DEFAULT_THEME_ID = "isb";
+
+function resolveThemeId(id: string): ColorTheme {
+  const found = THEMES.find((t) => t.id === id);
+  if (found) return found;
+  if (OLD_DARK_THEME_IDS.includes(id)) {
+    return THEMES.find((t) => t.id === DEFAULT_THEME_ID)!;
+  }
+  return THEMES[0];
+}
 
 const STORAGE_KEY = "isb-color-theme";
 
@@ -32,36 +49,31 @@ export function getStoredThemeId(): string {
   return localStorage.getItem(STORAGE_KEY) || "";
 }
 
-export function applyTheme(hue: number, dark: boolean) {
+/** Toutes les variables sont dérivées d'une seule teinte (hue). */
+export function applyTheme(hue: number, themeId?: string) {
   const root = document.documentElement;
-  const bgLight = dark ? 8 : 97;
-  const fgLight = dark ? 90 : 12;
-  const satBg = dark ? 40 : 100;
-  const satFg = dark ? 60 : 100;
-  const satSec = dark ? 40 : 100;
-  const satMut = dark ? 30 : 16;
-  const satMutFg = dark ? 30 : 18;
-  const satBorder = dark ? 30 : 100;
-  const satAcc = dark ? 30 : 16;
+  const bgLight = 97;
+  const fgLight = 12;
 
-  root.style.setProperty("--background", `${hue} ${satBg}% ${bgLight}%`);
-  root.style.setProperty("--foreground", `${hue} ${satFg}% ${fgLight}%`);
-  root.style.setProperty("--primary", dark ? `${hue} 60% 70%` : `${hue} 100% 12%`);
-  root.style.setProperty("--primary-foreground", dark ? `${hue} 80% 20%` : `46 100% 50%`);
-  root.style.setProperty("--card", dark ? `0 0% 12%` : `0 0% 100%`);
-  root.style.setProperty("--card-foreground", `${hue} ${satFg}% ${fgLight}%`);
-  root.style.setProperty("--secondary", `${hue} ${satSec}% ${dark ? 16 : 93}%`);
-  root.style.setProperty("--border", `${hue} ${satBorder}% ${dark ? 24 : 88}%`);
-  root.style.setProperty("--muted", `${hue} ${satMut}% ${dark ? 20 : 88}%`);
-  root.style.setProperty("--muted-foreground", `${hue} ${satMutFg}% ${dark ? 60 : 48}%`);
-  root.style.setProperty("--accent", `${hue} ${satAcc}% ${dark ? 20 : 88}%`);
-  root.style.setProperty("--ring", dark ? `${hue} 60% 70%` : `${hue} 100% 12%`);
-  root.style.setProperty("--destructive", `0 80% 50%`);
-  root.style.setProperty("--destructive-foreground", `0 0% 100%`);
-  root.classList.toggle("dark", dark);
+  root.style.setProperty("--background", `hsl(${hue} 100% ${bgLight}%)`);
+  root.style.setProperty("--foreground", `hsl(${hue} 100% ${fgLight}%)`);
+  root.style.setProperty("--primary", `hsl(${hue} 100% 12%)`);
+  root.style.setProperty("--primary-foreground", `hsl(46 100% 50%)`);
+  root.style.setProperty("--card", `hsl(0 0% 100%)`);
+  root.style.setProperty("--card-foreground", `hsl(${hue} 100% ${fgLight}%)`);
+  root.style.setProperty("--secondary", `hsl(${hue} 100% 93%)`);
+  root.style.setProperty("--border", `hsl(${hue} 100% 88%)`);
+  root.style.setProperty("--muted", `hsl(${hue} 16% 88%)`);
+  root.style.setProperty("--muted-foreground", `hsl(${hue} 18% 48%)`);
+  root.style.setProperty("--accent", `hsl(${hue} 16% 88%)`);
+  root.style.setProperty("--ring", `hsl(${hue} 100% 12%)`);
+  root.style.setProperty("--destructive", `hsl(0 80% 50%)`);
+  root.style.setProperty("--destructive-foreground", `hsl(0 0% 100%)`);
+  root.classList.remove("dark");
+  root.setAttribute("data-theme", themeId ?? "");
 
-  document.body.style.backgroundColor = `hsl(${hue} ${satBg}% ${bgLight}%)`;
-  document.body.style.color = `hsl(${hue} ${satFg}% ${fgLight}%)`;
+  document.body.style.background = `hsl(${hue} 100% ${bgLight}%)`;
+  document.body.style.color = `hsl(${hue} 100% ${fgLight}%)`;
 }
 
 interface ThemeContextType {
@@ -74,32 +86,33 @@ const ThemeContext = createContext<ThemeContextType | null>(null);
 
 export function ColorThemeProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const isLoginPage = location.pathname === "/login" || location.pathname.startsWith("/auth/");
+  // Ecrans sans session utilisateur fiable (login, callbacks OIDC) :
+  // toujours le rendu clair par defaut (isb, hue=36), jamais le thème du
+  // dernier utilisateur connecté sur ce poste.
+  const forcesNeutralTheme =
+    location.pathname === "/login" ||
+    location.pathname.startsWith("/auth/");
 
   const [theme, setThemeState] = useState<ColorTheme>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const found = THEMES.find((t) => t.id === saved);
-      if (found) return found;
-    }
-    return THEMES[0];
+    return saved ? resolveThemeId(saved) : THEMES[0];
   });
 
   useEffect(() => {
-    if (isLoginPage) {
-      applyTheme(36, false);
+    if (forcesNeutralTheme) {
+      applyTheme(36, "isb");
     } else {
-      applyTheme(theme.hue, theme.dark);
+      applyTheme(theme.hue, theme.id);
     }
-  }, [theme, isLoginPage]);
+  }, [theme, forcesNeutralTheme]);
 
   const setTheme = (id: string) => {
-    const found = THEMES.find((t) => t.id === id);
-    if (found) {
-      applyTheme(found.hue, found.dark);
-      setThemeState(found);
-      localStorage.setItem(STORAGE_KEY, id);
-    }
+    const resolved = resolveThemeId(id);
+    applyTheme(resolved.hue, resolved.id);
+    setThemeState(resolved);
+    // Persiste toujours l'id resolu (jamais un ancien id sombre supprime),
+    // pour que la migration ne se re-declenche pas a chaque chargement.
+    localStorage.setItem(STORAGE_KEY, resolved.id);
   };
 
   return (

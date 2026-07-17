@@ -35,6 +35,7 @@ class InterviewTemplate(models.Model):
     type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     description = models.TextField(blank=True)
     sections = models.JSONField(default=list)
+    version = models.IntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -43,6 +44,17 @@ class InterviewTemplate(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            old_sections = (
+                InterviewTemplate.objects.filter(pk=self.pk)
+                .values_list("sections", flat=True)
+                .first()
+            )
+            if old_sections is not None and old_sections != self.sections:
+                self.version += 1
+        super().save(*args, **kwargs)
 
 
 class Interview(models.Model):
@@ -62,12 +74,14 @@ class Interview(models.Model):
 
     employee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="interviews",
     )
     manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="managed_interviews",
     )
     campaign = models.ForeignKey(
@@ -76,10 +90,15 @@ class Interview(models.Model):
     template = models.ForeignKey(
         InterviewTemplate, null=True, blank=True, on_delete=models.SET_NULL, related_name="interviews"
     )
-    type = models.CharField(max_length=20, choices=Type.choices)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
-    due_date = models.DateField()
+    type = models.CharField(max_length=20, choices=Type.choices, db_index=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
+    due_date = models.DateField(db_index=True)
+    # Date a laquelle l'entretien a effectivement eu lieu — distincte de
+    # due_date (echeance/date limite). Renseignee au moment de la
+    # realisation, pas a la creation de l'entretien.
+    date_realisation = models.DateField(null=True, blank=True)
     content = models.JSONField(default=dict, blank=True)
+    template_snapshot = models.JSONField(null=True, blank=True)
     document = models.FileField(upload_to="interview_docs/", null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -89,3 +108,13 @@ class Interview(models.Model):
 
     def __str__(self):
         return f"{self.get_type_display()} - {self.employee}"
+
+    def get_effective_template_sections(self):
+        """Retourne la structure du template au moment de la creation de
+        l'entretien (template_snapshot), avec repli sur le template vivant
+        pour les entretiens crees avant l'introduction du snapshot."""
+        if self.template_snapshot is not None:
+            return self.template_snapshot
+        if self.template:
+            return self.template.sections
+        return []

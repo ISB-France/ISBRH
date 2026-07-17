@@ -1,23 +1,32 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Download, Trash2, Upload, X } from "lucide-react";
+import { Plus, Download, Trash2, Upload, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
 import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import ErrorScreen from "../components/ErrorScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
 import api from "../api";
 import type { Interview, User } from "../types";
+import { formatDate } from "../lib/utils";
+
+const filenameFromContentDisposition = (contentDisposition: string | undefined, fallback: string) => {
+  const match = contentDisposition?.match(/filename="?([^"]+)"?/);
+  return match ? match[1] : fallback;
+};
 
 const downloadPdf = async (id: number) => {
   const res = await api.get(`/interviews/${id}/pdf/`, { responseType: "blob" });
   const url = URL.createObjectURL(res.data);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `entretien_${id}.pdf`;
+  a.download = filenameFromContentDisposition(res.headers["content-disposition"], `entretien_${id}.pdf`);
   a.click();
   URL.revokeObjectURL(url);
 };
@@ -29,6 +38,13 @@ const openPrint = async (id: number) => {
   w.document.write(res.data);
   w.document.close();
   w.focus();
+};
+
+const toIsoDate = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 };
 
 const statusLabel: Record<string, string> = {
@@ -45,9 +61,24 @@ export default function Interviews() {
   const [type, setType] = useState("");
   const [scope, setScope] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [year, setYear] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const uploadTargetRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -74,6 +105,41 @@ export default function Interviews() {
         params: { type, status: statusParam, scope: scope || undefined, ordering: showHistory ? "-updated_at" : undefined },
       }).then((r) => r.data),
   });
+
+  const availableYears = useMemo(() => {
+    if (!interviews) return [];
+    const years = new Set(interviews.map((iv) => iv.due_date.slice(0, 4)));
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  }, [interviews]);
+
+  const displayed = useMemo(() => {
+    if (!interviews) return interviews;
+    let filtered = interviews;
+    if (showHistory && year) {
+      filtered = filtered.filter((iv) => iv.due_date.slice(0, 4) === year);
+    }
+    if (!showHistory && (dateRange?.from || dateRange?.to)) {
+      const from = dateRange.from ? toIsoDate(dateRange.from) : undefined;
+      const to = dateRange.to ? toIsoDate(dateRange.to) : undefined;
+      filtered = filtered.filter((iv) => {
+        if (from && iv.due_date < from) return false;
+        if (to && iv.due_date > to) return false;
+        return true;
+      });
+    }
+    if (!sortField) return filtered;
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "employee") {
+        const aName = `${a.employee_detail?.first_name ?? ""} ${a.employee_detail?.last_name ?? ""}`.trim();
+        const bName = `${b.employee_detail?.first_name ?? ""} ${b.employee_detail?.last_name ?? ""}`.trim();
+        cmp = aName.localeCompare(bName);
+      } else if (sortField === "due_date") {
+        cmp = a.due_date.localeCompare(b.due_date);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [interviews, sortField, sortDir, showHistory, year, dateRange]);
 
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les entretiens" onRetry={refetch} />;
@@ -117,17 +183,74 @@ export default function Interviews() {
         <div className="inline-flex rounded-md border border-border">
           <button
             className={`px-4 py-2 text-sm font-medium transition-colors ${!showHistory ? "bg-primary-foreground text-primary" : "bg-white text-muted-foreground hover:bg-muted/50"}`}
-            onClick={() => setShowHistory(false)}
+            onClick={() => { setShowHistory(false); setSelectedIds([]); }}
           >
             En cours
           </button>
           <button
             className={`px-4 py-2 text-sm font-medium transition-colors ${showHistory ? "bg-primary-foreground text-primary" : "bg-white text-muted-foreground hover:bg-muted/50"}`}
-            onClick={() => setShowHistory(true)}
+            onClick={() => { setShowHistory(true); setSelectedIds([]); }}
           >
             Historique
           </button>
         </div>
+        {showHistory && (
+          <select
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+          >
+            <option value="">Toutes les années</option>
+            {availableYears.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        )}
+        {!showHistory && (
+          <div className="flex items-center gap-1">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="h-10 gap-2 text-sm font-normal">
+                  <CalendarIcon className="h-4 w-4" />
+                  {dateRange?.from
+                    ? dateRange.to
+                      ? `${formatDate(toIsoDate(dateRange.from))} – ${formatDate(toIsoDate(dateRange.to))}`
+                      : formatDate(toIsoDate(dateRange.from))
+                    : "Date limite"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={setDateRange}
+                  defaultMonth={dateRange?.from}
+                  modifiersClassNames={{
+                    range_start: "rounded-l-full rounded-r-none",
+                    range_end: "rounded-r-full rounded-l-none",
+                    range_middle: "rounded-none",
+                  }}
+                  modifiersStyles={{
+                    range_start: { backgroundColor: "#f6b8b8", color: "#7f1d1d" },
+                    range_end: { backgroundColor: "#f6b8b8", color: "#7f1d1d" },
+                    range_middle: { backgroundColor: "#fff2f2", color: "#7f1d1d" },
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+            {(dateRange?.from || dateRange?.to) && (
+              <Button variant="ghost" size="sm" onClick={() => setDateRange(undefined)}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
+        {selectedIds.length > 0 && (
+          <Button variant="destructive" size="sm" onClick={() => setShowBulkDeleteConfirm(true)}>
+            <Trash2 className="mr-1 h-4 w-4" />
+            Supprimer ({selectedIds.length})
+          </Button>
+        )}
         <input ref={fileInputRef} type="file" accept=".pdf" className="hidden" onChange={handleDocumentUpload} />
       </div>
 
@@ -136,11 +259,42 @@ export default function Interviews() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase text-muted-foreground">
-                <th className="px-6 pb-3 pt-4">Employé</th>
+                <th className="px-4 pb-3 pt-4 w-10">
+                  {(currentUser?.role === "admin" || currentUser?.role === "rh") && (
+                    <input
+                      type="checkbox"
+                      checked={interviews !== undefined && interviews.length > 0 && selectedIds.length === interviews.length}
+                      onChange={() => {
+                        if (!interviews) return;
+                        setSelectedIds(selectedIds.length === interviews.length ? [] : interviews.map((iv) => iv.id));
+                      }}
+                      className="h-4 w-4"
+                    />
+                  )}
+                </th>
+                <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("employee")}>
+                  <div className="flex items-center gap-1">
+                    Collaborateur
+                    {sortField === "employee" ? (
+                      sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 pb-3 pt-4">Type</th>
                 <th className="px-6 pb-3 pt-4">Modèle</th>
                 <th className="px-6 pb-3 pt-4">Statut</th>
-                <th className="px-6 pb-3 pt-4">Date limite</th>
+                <th className="px-6 pb-3 pt-4 cursor-pointer select-none hover:text-foreground" onClick={() => handleSort("due_date")}>
+                  <div className="flex items-center gap-1">
+                    Date limite
+                    {sortField === "due_date" ? (
+                      sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
+                    ) : (
+                      <ArrowUpDown className="h-3 w-3 opacity-30" />
+                    )}
+                  </div>
+                </th>
                 <th className="px-6 pb-3 pt-4">Manager</th>
                 <th className="px-6 pb-3 pt-4"></th>
               </tr>
@@ -148,16 +302,30 @@ export default function Interviews() {
             <tbody>
               {interviews?.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="px-6 py-8 text-center text-sm text-muted-foreground">
                     {showHistory ? "Aucun entretien terminé" : "Aucun entretien en cours"}
                   </td>
                 </tr>
               )}
-              {interviews?.map((iv) => (
+              {displayed?.map((iv) => (
                 <tr
                   key={iv.id}
                   className="border-b border-border last:border-0 transition-colors"
                 >
+                  <td className="px-4 py-3">
+                    {(currentUser?.role === "admin" || currentUser?.role === "rh") && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(iv.id)}
+                        onChange={() =>
+                          setSelectedIds((prev) =>
+                            prev.includes(iv.id) ? prev.filter((x) => x !== iv.id) : [...prev, iv.id],
+                          )
+                        }
+                        className="h-4 w-4"
+                      />
+                    )}
+                  </td>
                   <td className="px-6 py-3 text-sm font-medium">
                     {iv.employee_detail?.first_name} {iv.employee_detail?.last_name}
                   </td>
@@ -172,7 +340,7 @@ export default function Interviews() {
                       {statusLabel[iv.status]}
                     </Badge>
                   </td>
-                  <td className="px-6 py-3 text-sm">{iv.due_date}</td>
+                  <td className="px-6 py-3 text-sm">{formatDate(iv.due_date)}</td>
                   <td className="px-6 py-3">
                     <div className="text-sm text-muted-foreground">
                       {iv.manager_detail?.first_name} {iv.manager_detail?.last_name}
@@ -242,6 +410,21 @@ export default function Interviews() {
           </table>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={showBulkDeleteConfirm}
+        title="Supprimer la sélection"
+        message={`Êtes-vous sûr de vouloir supprimer ${selectedIds.length} entretien${selectedIds.length > 1 ? "s" : ""} ? Cette action est irréversible.`}
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        onConfirm={async () => {
+          setShowBulkDeleteConfirm(false);
+          await api.post("/interviews/bulk_delete/", { ids: selectedIds });
+          setSelectedIds([]);
+          queryClient.invalidateQueries({ queryKey: ["interviews"] });
+        }}
+        onCancel={() => setShowBulkDeleteConfirm(false)}
+      />
 
       <ConfirmDialog
         open={deleteId !== null}
