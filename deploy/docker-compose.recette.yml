@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${DB_NAME:-isboard_recette}
-      POSTGRES_USER: ${DB_USER:-isboard}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-isboard}
+      POSTGRES_DB: ${DB_NAME:-workisbeautiful_recette}
+      POSTGRES_USER: ${DB_USER:-workisbeautiful}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-workisbeautiful}
     ports:
       - "5435:5432"
     volumes:
@@ -15,7 +15,7 @@ services:
     build:
       context: ./app/backend
       dockerfile: Dockerfile.prod
-    env_file: /etc/isboard/.recette.env
+    env_file: /etc/workisbeautiful/.recette.env
     depends_on:
       db:
         condition: service_started

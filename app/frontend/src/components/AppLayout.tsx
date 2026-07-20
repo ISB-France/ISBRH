@@ -85,7 +85,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex items-center gap-3 px-6 py-6">
           <img src="/logo-white.png" alt="ISB France" className="h-8 w-auto" />
-          <span className="font-display text-lg font-semibold text-primary-foreground">ISBoard</span>
+          <span className="font-display text-lg font-semibold text-primary-foreground">WorkIsBeautiful</span>
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {navItems

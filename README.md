@@ -1,4 +1,4 @@
-# ISBoard
+# WorkIsBeautiful
 
 Gestion des entretiens annuels et professionnels — ISB France.
 

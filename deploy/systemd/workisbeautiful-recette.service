@@ -1,0 +1,15 @@
+[Unit]
+Description=WorkIsBeautiful Recette
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/var/www/app-recette
+ExecStart=/usr/bin/docker compose -f deploy/docker-compose.recette.yml --env-file /etc/workisbeautiful/recette.env -p workisbeautiful-recette up -d
+ExecStop=/usr/bin/docker compose -f deploy/docker-compose.recette.yml -p workisbeautiful-recette down
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

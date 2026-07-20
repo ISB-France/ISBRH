@@ -2,8 +2,8 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: isboard_recette
-      POSTGRES_USER: isboard
+      POSTGRES_DB: workisbeautiful_recette
+      POSTGRES_USER: workisbeautiful
       POSTGRES_PASSWORD: assietteVerbeProgrammationsport
     ports:
       - "5434:5432"

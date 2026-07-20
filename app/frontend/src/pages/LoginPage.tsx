@@ -44,7 +44,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <img src="/logo-dark.png" alt="ISB France" className="mx-auto mb-4 h-14 w-auto" />
-          <h1 className="font-display text-2xl font-bold text-primary">ISBoard</h1>
+          <h1 className="font-display text-2xl font-bold text-primary">WorkIsBeautiful</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Gestion des entretiens annuels et professionnels
           </p>
