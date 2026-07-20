@@ -213,6 +213,7 @@ class AdminRoleProtectionTests(TestCase):
             email="admin2@example.com",
             password="pass1234",
             role="admin",
+            matricule="00000777",
         )
         response = self.client.put(
             f"/api/users/{admin_user.id}/",
@@ -221,6 +222,7 @@ class AdminRoleProtectionTests(TestCase):
                 "first_name": "Admin",
                 "last_name": "Modifié",
                 "role": "admin",
+                "matricule": admin_user.matricule,
             },
             format="json",
         )

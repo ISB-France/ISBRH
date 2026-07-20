@@ -82,7 +82,7 @@ class User(AbstractUser):
         AGENT_MAITRISE = "agent_maitrise", "Agent de maîtrise"
         CADRE = "cadre", "Cadre"
 
-    email = models.EmailField(unique=True)
+    email = models.EmailField(unique=True, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE, db_index=True)
 
     # Identité
@@ -94,7 +94,7 @@ class User(AbstractUser):
     preferences = models.TextField(blank=True, default="")
 
     # Contrat
-    matricule = models.CharField(max_length=50, unique=True, blank=True)
+    matricule = models.CharField(max_length=50, unique=True)
     hire_date = models.DateField(null=True, blank=True)
     date_sortie = models.DateField(null=True, blank=True, db_index=True)
     type_contrat = models.CharField(max_length=20, choices=TypeContrat.choices, blank=True, db_index=True)

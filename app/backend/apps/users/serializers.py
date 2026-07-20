@@ -65,6 +65,16 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Le rôle admin ne peut pas être attribué via ce formulaire")
         return value
 
+    def validate(self, attrs):
+        # L'email est optionnel : sur creation (ou si explicitement vide sur
+        # une modification), on genere un email temporaire a partir du
+        # matricule plutot que de laisser le champ vide (unique=True).
+        is_create = self.instance is None
+        if not attrs.get("email") and (is_create or "email" in attrs):
+            matricule = attrs.get("matricule") or getattr(self.instance, "matricule", "")
+            attrs["email"] = f"{matricule}@sansemail.isb.fr"
+        return attrs
+
     def create(self, validated_data):
         validated_data["username"] = validated_data["email"]
         return super().create(validated_data)

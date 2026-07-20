@@ -2,6 +2,8 @@
 
 Cinq imports sont disponibles depuis la page **Utilisateurs** (réservé aux rôles RH/Admin), plus un import de modèles d'entretien depuis la page **Modèles** (réservé aux rôles RH/Admin/Manager).
 
+ℹ️ La création manuelle d'un utilisateur via le formulaire (page **Utilisateurs**) suit la même règle que l'import Kostango : **Prénom, Nom et Matricule sont obligatoires, l'email est optionnel**. S'il est laissé vide, un email temporaire `{matricule}@sansemail.isb.fr` est généré automatiquement.
+
 ---
 
 ## 1. Import utilisateurs (Kostango)

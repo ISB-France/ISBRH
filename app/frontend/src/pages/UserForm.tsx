@@ -332,8 +332,8 @@ export default function UserForm() {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Email <span className="text-red-500">*</span></label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <label className="mb-1.5 block text-sm font-medium">Email</label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <SelectField label="Sexe" value={sexe} onChange={setSexe} options={[
@@ -412,7 +412,7 @@ export default function UserForm() {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Matricule</label>
+                <label className="mb-1.5 block text-sm font-medium">Matricule <span className="text-red-500">*</span></label>
                 <Input
                   value={matricule}
                   onChange={(e) => setMatricule(e.target.value)}
