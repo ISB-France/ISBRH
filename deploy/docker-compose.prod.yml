@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${DB_NAME:-workisbeautiful}
-      POSTGRES_USER: ${DB_USER:-workisbeautiful}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-workisbeautiful}
+      POSTGRES_DB: ${DB_NAME:-isbrh}
+      POSTGRES_USER: ${DB_USER:-isbrh}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-isbrh}
     ports:
       - "5433:5432"
     volumes:
@@ -15,7 +15,7 @@ services:
     build:
       context: ./app/backend
       dockerfile: Dockerfile.prod
-    env_file: /etc/workisbeautiful/prod.env
+    env_file: /etc/isbrh/prod.env
     depends_on:
       db:
         condition: service_started

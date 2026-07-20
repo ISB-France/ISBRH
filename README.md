@@ -1,4 +1,4 @@
-# WorkIsBeautiful
+# ISBRH
 
 Gestion des entretiens annuels et professionnels — ISB France.
 

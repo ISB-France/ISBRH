@@ -1,4 +1,4 @@
-# Déploiement — WorkIsBeautiful
+# Déploiement — ISBRH
 
 ## Architecture
 
@@ -20,8 +20,8 @@
 
 | Environnement | Chemin code | Fichier .env | Branche |
 |---|---|---|---|
-| Production | `/var/www/app-prod` | `/etc/workisbeautiful/prod.env` | `main` |
-| Recette | `/var/www/app-recette` | `/etc/workisbeautiful/recette.env` | `recette` |
+| Production | `/var/www/app-prod` | `/etc/isbrh/prod.env` | `main` |
+| Recette | `/var/www/app-recette` | `/etc/isbrh/recette.env` | `recette` |
 
 ## Workflow Git
 
@@ -41,8 +41,8 @@ dev ──→ recette ──→ main
 sudo bash /var/www/app-prod/deploy/scripts/setup-server.sh
 
 # 2. Éditer les fichiers .env (hors du dossier servi)
-nano /etc/workisbeautiful/prod.env
-nano /etc/workisbeautiful/recette.env
+nano /etc/isbrh/prod.env
+nano /etc/isbrh/recette.env
 
 # 3. Ajouter les secrets dans GitHub
 # Settings → Secrets and variables → Actions
@@ -62,12 +62,12 @@ nano /etc/workisbeautiful/recette.env
 
 ```bash
 # Voir les logs d'un environnement
-docker compose -p workisbeautiful-prod logs -f
-docker compose -p workisbeautiful-recette logs -f
+docker compose -p isbrh-prod logs -f
+docker compose -p isbrh-recette logs -f
 
 # Redémarrer un environnement
-docker compose -p workisbeautiful-prod restart
+docker compose -p isbrh-prod restart
 
 # Stopper un environnement
-docker compose -p workisbeautiful-recette down
+docker compose -p isbrh-recette down
 ```

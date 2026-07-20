@@ -14,7 +14,7 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ["recette.workisbeautiful.groupe-isb.fr"],
+    allowedHosts: ["recette.isbrh.groupe-isb.fr"],
     host: "0.0.0.0",
     port: 5173,
     proxy: {

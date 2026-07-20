@@ -1,6 +1,6 @@
 # Schéma de la base de données
 
-PostgreSQL 16 — Base `workisbeautiful` (ou `workisbeautiful_recette` / `workisbeautiful_prod` selon l'environnement).
+PostgreSQL 16 — Base `isbrh` (ou `isbrh_recette` / `isbrh_prod` selon l'environnement).
 
 ---
 

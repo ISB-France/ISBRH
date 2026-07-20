@@ -37,7 +37,7 @@ class ProdSettingsSafetyTests(SimpleTestCase):
 
     def test_boot_fails_in_prod_without_explicit_secret_key(self):
         result = self._boot_with_env(
-            {"DEBUG": "False", "ALLOWED_HOSTS": "workisbeautiful.example.com"},
+            {"DEBUG": "False", "ALLOWED_HOSTS": "isbrh.example.com"},
             unset=("DJANGO_SECRET_KEY",),
         )
         self.assertNotEqual(result.returncode, 0)
@@ -58,7 +58,7 @@ class ProdSettingsSafetyTests(SimpleTestCase):
             {
                 "DEBUG": "False",
                 "DJANGO_SECRET_KEY": "a-real-secret-key",
-                "ALLOWED_HOSTS": "workisbeautiful.example.com",
+                "ALLOWED_HOSTS": "isbrh.example.com",
             }
         )
         self.assertEqual(result.returncode, 0, result.stderr)
