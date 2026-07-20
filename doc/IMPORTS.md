@@ -8,41 +8,43 @@ Cinq imports sont disponibles depuis la page **Utilisateurs** (réservé aux rô
 
 **Endpoint :** `POST /api/users/import_kostango/`
 
-Import principal depuis l'export Kostango. Crée ou met à jour les utilisateurs par **email**.
+Import principal depuis l'export Kostango. Crée ou met à jour les utilisateurs par **matricule**.
 
 ### Colonnes du CSV
 
-| Colonne | Description | Exemple |
-|---|---|---|
-| `personne email` | Email (clé de liaison) | `jean.dupont@isb.fr` |
-| `Prénom` | Prénom | `Jean` |
-| `Nom` | Nom | `DUPONT` |
-| `Matricule` | Matricule unique | `00000001` |
-| `Date de naissance` | Date de naissance | `15/03/1985` |
-| `Date d'embauche` | Date d'entrée | `01/09/2020` |
-| `Date de sortie` | Date de sortie (vide si actif) | `31/12/2024` |
-| `Sexe` | `Homme` / `Femme` | `Homme` |
-| `Site (nom complet)` | Site (chemin complet, dernier segment utilisé) | `ISB France > Paris` |
-| `Poste` | Intitulé du poste | `Développeur` |
-| `Type contrat` | `CDI` / `CDD` / `Intérim` / `Alternance` / `Stage` | `CDI` |
-| `Statut` | Statut RH (`Cadre`/`FJ`/etc.) | `Cadre` |
-| `Coefficient` | Coefficient | `250` |
-| `Forfait jour` | `true` / `false` | `true` |
-| `Tickets restaurant` | `true` / `false` | `true` |
-| `Agence d'intérim` | Agence (intérim uniquement) | `Supplay` |
-| `valideur N+1` | Nom complet du N+1 (résolu en 2ème passe) | `Marie MARTIN` |
+| Colonne | Description | Exemple | Obligatoire |
+|---|---|---|---|
+| `Prénom` | Prénom | `Jean` | **oui** |
+| `Nom` | Nom | `DUPONT` | **oui** |
+| `Matricule` | Matricule unique (clé de liaison) | `00000001` | **oui** |
+| `personne email` | Email ; si absent, un email temporaire est généré (`{matricule}@kostango.isb.fr`) | `jean.dupont@isb.fr` | non |
+| `Date de naissance` | Date de naissance | `15/03/1985` | non |
+| `Date d'embauche` | Date d'entrée | `01/09/2020` | non |
+| `Date de sortie` | Date de sortie (vide si actif) | `31/12/2024` | non |
+| `Sexe` | `Homme` / `Femme` | `Homme` | non |
+| `Site (nom complet)` | Site (chemin complet, dernier segment utilisé) | `ISB France > Paris` | non |
+| `Poste` | Intitulé du poste | `Développeur` | non |
+| `Type contrat` | `CDI` / `CDD` / `Intérim` / `Alternance` / `Stage` | `CDI` | non |
+| `Statut` | Statut RH (`Cadre`/`FJ`/etc.) | `Cadre` | non |
+| `Coefficient` | Coefficient | `250` | non |
+| `Forfait jour` | `true` / `false` | `true` | non |
+| `Tickets restaurant` | `true` / `false` | `true` | non |
+| `Agence d'intérim` | Agence (intérim uniquement) | `Supplay` | non |
+| `valideur N+1` | Nom complet du N+1 (résolu en 2ème passe) | `Marie MARTIN` | non |
 
 ### Règles
-- **Clé :** `personne email`
+- **Clé :** `Matricule`
+- **Obligatoires :** `Prénom`, `Nom`, `Matricule` — une ligne sans l'un de ces trois champs est rejetée avec une erreur explicite
+- `personne email` est optionnel : si absent, un email temporaire `{matricule}@kostango.isb.fr` est généré automatiquement
 - Création ou mise à jour (synchronisation) des champs ci-dessus
 - `Cadre` et `Forfait jour` déduits du `Statut` Kostango
-- Le `valideur N+1` est résolu dans un second temps pour établir la hiérarchie
+- Le `valideur N+1` est résolu dans un second temps pour établir la hiérarchie (recherche par nom complet)
 - Les managers sont promus automatiquement (passage en rôle `manager`)
 
 ### Exemple de ligne
 ```
-personne email,Prénom,Nom,Matricule,Date de naissance,Date d'embauche,Date de sortie,Sexe,Site (nom complet),Poste,Type contrat,Statut,Coefficient,Forfait jour,Tickets restaurant,Agence d'intérim,valideur N+1
-jean.dupont@isb.fr,Jean,DUPONT,00000001,15/03/1985,01/09/2020,,Homme,ISB France > Paris,Développeur,CDI,Cadre,250,true,true,,Marie MARTIN
+Prénom,Nom,Matricule,personne email,Date de naissance,Date d'embauche,Date de sortie,Sexe,Site (nom complet),Poste,Type contrat,Statut,Coefficient,Forfait jour,Tickets restaurant,Agence d'intérim,valideur N+1
+Jean,DUPONT,00000001,jean.dupont@isb.fr,15/03/1985,01/09/2020,,Homme,ISB France > Paris,Développeur,CDI,Cadre,250,true,true,,Marie MARTIN
 ```
 
 ---

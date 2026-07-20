@@ -704,31 +704,42 @@ class UserViewSet(viewsets.ModelViewSet):
         decoded = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(decoded))
 
+        def parse_name(row):
+            first_name = row.get("Prénom", "").strip()
+            last_name = row.get("Nom", "").strip()
+            if not first_name and not last_name:
+                full = row.get("personne nom complet", "").strip()
+                parts = full.split(" ", 1)
+                if len(parts) == 2:
+                    first_name = parts[0].strip().capitalize()
+                    last_name = parts[1].strip().upper()
+                elif len(parts) == 1 and parts[0]:
+                    last_name = parts[0].strip().upper()
+            return first_name, last_name
+
+        errors = []
         rows = []
         for row_num, row in enumerate(reader, start=2):
-            email = row.get("personne email", "").strip().lower()
-            if not email:
+            first_name, last_name = parse_name(row)
+            matricule = row.get("Matricule", "").strip()
+            missing = [
+                label
+                for label, value in (("Prénom", first_name), ("Nom", last_name), ("Matricule", matricule))
+                if not value
+            ]
+            if missing:
+                errors.append(f"Ligne {row_num}: {', '.join(missing)} manquant(s)")
                 continue
-            rows.append((row_num, row, email))
+            rows.append((row_num, row, matricule))
 
         created = 0
-        errors = []
         user_map = {}
 
         # Premier passage : créer tous les utilisateurs
-        for row_num, row, email in rows:
+        for row_num, row, matricule in rows:
             try:
-                # Prénom/Nom : d'abord les colonnes dédiées, sinon "personne nom complet"
-                first_name = row.get("Prénom", "").strip()
-                last_name = row.get("Nom", "").strip()
-                if not first_name and not last_name:
-                    full = row.get("personne nom complet", "").strip()
-                    parts = full.split(" ", 1)
-                    if len(parts) == 2:
-                        first_name = parts[0].strip().capitalize()
-                        last_name = parts[1].strip().upper()
-                    elif len(parts) == 1 and parts[0]:
-                        last_name = parts[0].strip().upper()
+                first_name, last_name = parse_name(row)
+                email = row.get("personne email", "").strip().lower() or f"{matricule}@kostango.isb.fr"
 
                 # Site — on prend le dernier segment après " > "
                 site_full = row.get("Site (nom complet)", "").strip()
@@ -782,9 +793,10 @@ class UserViewSet(viewsets.ModelViewSet):
                     forfait_jour = True
 
                 user, created_flag = User.objects.get_or_create(
-                    email=email,
+                    matricule=matricule,
                     defaults={
                         "username": email,
+                        "email": email,
                         "first_name": first_name,
                         "last_name": last_name,
                         "role": role,
@@ -792,7 +804,6 @@ class UserViewSet(viewsets.ModelViewSet):
                         "date_naissance": date_naissance,
                         "site": site,
                         "position": position,
-                        "matricule": row.get("Matricule", "").strip(),
                         "type_contrat": type_contrat,
                         "statut": statut,
                         "coefficient": coefficient,
@@ -812,13 +823,13 @@ class UserViewSet(viewsets.ModelViewSet):
                     # Mise à jour des champs (synchronisation Kostango)
                     changed = False
                     for f, v in [
+                        ("email", email),
                         ("first_name", first_name),
                         ("last_name", last_name),
                         ("sexe", sexe),
                         ("date_naissance", date_naissance),
                         ("site", site),
                         ("position", position),
-                        ("matricule", row.get("Matricule", "").strip()),
                         ("type_contrat", type_contrat),
                         ("statut", statut),
                         ("coefficient", coefficient),
@@ -834,44 +845,43 @@ class UserViewSet(viewsets.ModelViewSet):
                             changed = True
                     if changed:
                         user.save()
-                user_map[email] = user
+                user_map[matricule] = user
             except Exception as e:
-                errors.append(f"Ligne {row_num} ({email}): {e}")
+                errors.append(f"Ligne {row_num} ({matricule}): {e}")
 
-        # Construire un mapping nom → email pour chercher les managers par nom
-        name_to_email = {}
-        for u_email, u in user_map.items():
+        # Construire un mapping nom → matricule pour chercher les managers par nom
+        name_to_matricule = {}
+        for u_matricule, u in user_map.items():
             full = f"{u.first_name} {u.last_name}".strip().lower()
             if full:
-                name_to_email[full] = u_email
-            name_to_email[u.email.lower()] = u_email
+                name_to_matricule[full] = u_matricule
 
         # Deuxième passage : assigner les managers via valideur N+1
-        for row_num, row, email in rows:
+        for row_num, row, matricule in rows:
             try:
-                user = user_map.get(email)
+                user = user_map.get(matricule)
                 if not user:
                     continue
                 valideur = row.get("valideur N+1", "").strip().lower()
                 if not valideur:
                     continue
-                manager_email = name_to_email.get(valideur)
-                if manager_email and manager_email in user_map:
-                    user.manager = user_map[manager_email]
+                manager_matricule = name_to_matricule.get(valideur)
+                if manager_matricule and manager_matricule in user_map:
+                    user.manager = user_map[manager_matricule]
                     user.save(update_fields=["manager"])
             except Exception as e:
-                errors.append(f"Ligne {row_num} ({email}) - manager: {e}")
+                errors.append(f"Ligne {row_num} ({matricule}) - manager: {e}")
 
         # Troisième passage : promouvoir en manager ceux qui sont valideur N+1 de quelqu'un
-        manager_emails = set()
-        for row_num, row, email in rows:
+        manager_matricules = set()
+        for row_num, row, matricule in rows:
             valideur = row.get("valideur N+1", "").strip().lower()
             if valideur:
-                mgr_email = name_to_email.get(valideur)
-                if mgr_email and mgr_email in user_map:
-                    manager_emails.add(mgr_email)
-        for mgr_email in manager_emails:
-            mgr = user_map.get(mgr_email)
+                mgr_matricule = name_to_matricule.get(valideur)
+                if mgr_matricule and mgr_matricule in user_map:
+                    manager_matricules.add(mgr_matricule)
+        for mgr_matricule in manager_matricules:
+            mgr = user_map.get(mgr_matricule)
             if mgr and mgr.role == "employee":
                 mgr.role = "manager"
                 mgr.save(update_fields=["role"])
