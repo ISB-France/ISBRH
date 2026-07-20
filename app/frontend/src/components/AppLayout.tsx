@@ -83,7 +83,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        <div className="flex items-center gap-3 px-6 py-6">
+        <div className="flex flex-col items-start gap-2 px-6 py-6">
           <img src="/logo-white.png" alt="ISB France" className="h-8 w-auto" />
           <span className="font-display text-lg font-semibold text-primary-foreground">WorkIsBeautiful</span>
         </div>
