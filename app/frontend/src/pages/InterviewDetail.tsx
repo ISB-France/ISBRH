@@ -10,9 +10,15 @@ import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import { Toast, useToast } from "../components/Toast";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { DateInput } from "../components/ui/date-input";
 import api from "../api";
 import type { Interview, User, Section, ObjectifBilanAnswer } from "../types";
 import { formatDate } from "../lib/utils";
+
+const toApiDate = (val: string) => {
+  const parts = val.split("/");
+  return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : val;
+};
 
 const statusLabel: Record<string, string> = {
   draft: "Brouillon",
@@ -43,7 +49,7 @@ export default function InterviewDetail() {
     api.get(`/interviews/${id}/`).then((r) => {
       setInterview(r.data);
       setSections(r.data.content?.sections || []);
-      setDateRealisation(r.data.date_realisation || "");
+      setDateRealisation(formatDate(r.data.date_realisation));
     });
   }, [id]);
 
@@ -122,7 +128,7 @@ export default function InterviewDetail() {
     try {
       const payload: Record<string, unknown> = {
         content: { ...interview.content, sections: sectionsToSave, lieu: interview.employee_detail?.site_name || "" },
-        date_realisation: dateRealisation || null,
+        date_realisation: toApiDate(dateRealisation) || null,
       };
       if (newStatus) {
         payload.status = newStatus;
@@ -194,13 +200,9 @@ export default function InterviewDetail() {
           </p>
           <div className="mt-2 flex items-center gap-2">
             <label className="text-sm text-muted-foreground">Date de réalisation :</label>
-            <input
-              type="date"
-              value={dateRealisation}
-              onChange={(e) => setDateRealisation(e.target.value)}
-              disabled={isReadOnly}
-              className="h-8 rounded-md border border-border bg-white px-2 text-sm"
-            />
+            <div className="w-40">
+              <DateInput value={dateRealisation} onChange={setDateRealisation} disabled={isReadOnly} />
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
