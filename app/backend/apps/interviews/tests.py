@@ -558,3 +558,84 @@ class InterviewTemplateSectionsValidationTests(TestCase):
         response = self.client.post("/api/interview-templates/", self._payload(sections), format="json")
         self.assertEqual(response.status_code, 400)
         self.assertIn("sections", response.data)
+
+
+class DefaultCommentSectionAndTableRowsTests(TestCase):
+    """Chaque entretien cree doit recevoir automatiquement une section
+    Commentaire (collaborateur + manager), et toute question de type table
+    sans reponse doit demarrer avec 5 lignes vides par defaut."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+        sections = [
+            {
+                "id": "s1", "title": "Section 1",
+                "questions": [
+                    {
+                        "id": "q1", "label": "Tableau", "type": "table",
+                        "columns": [{"id": "c1", "label": "Colonne 1", "type": "textarea"}],
+                        "answer": [],
+                    },
+                ],
+            }
+        ]
+        self.template = InterviewTemplate.objects.create(
+            name="Template avec tableau", type="professional", sections=sections
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_new_interview_has_default_comment_section(self):
+        response = self.client.post(
+            "/api/interviews/",
+            {
+                "employee": self.employee.id,
+                "template": self.template.id,
+                "type": "professional",
+                "due_date": "2026-12-31",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        sections = response.data["content"]["sections"]
+        comment_section = next((s for s in sections if s["id"] == "commentaires"), None)
+        self.assertIsNotNone(comment_section)
+        question_ids = {q["id"] for q in comment_section["questions"]}
+        self.assertEqual(question_ids, {"commentaire_collaborateur", "commentaire_manager"})
+
+    def test_new_interview_table_question_gets_five_default_empty_rows(self):
+        response = self.client.post(
+            "/api/interviews/",
+            {
+                "employee": self.employee.id,
+                "template": self.template.id,
+                "type": "professional",
+                "due_date": "2026-12-31",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        sections = response.data["content"]["sections"]
+        table_q = next(q for s in sections for q in s["questions"] if q["id"] == "q1")
+        self.assertEqual(len(table_q["answer"]), 5)
+        self.assertTrue(all(cell is None for row in table_q["answer"] for cell in row))
+
+    def test_template_sections_not_mutated_by_default_application(self):
+        self.client.post(
+            "/api/interviews/",
+            {
+                "employee": self.employee.id,
+                "template": self.template.id,
+                "type": "professional",
+                "due_date": "2026-12-31",
+            },
+            format="json",
+        )
+        self.template.refresh_from_db()
+        table_q = self.template.sections[0]["questions"][0]
+        self.assertEqual(table_q["answer"], [])

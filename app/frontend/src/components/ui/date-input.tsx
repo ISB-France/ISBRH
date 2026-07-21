@@ -51,6 +51,10 @@ export function DateInput({ value, onChange, required, placeholder }: DateInputP
             if (date) onChange(dateToDisplay(date));
           }}
           autoFocus
+          classNames={{ selected: "rounded-full" }}
+          modifiersStyles={{
+            selected: { backgroundColor: "#f6b8b8", color: "#7f1d1d" },
+          }}
         />
       </PopoverContent>
       {required && (

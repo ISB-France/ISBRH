@@ -9,6 +9,7 @@ import { Textarea } from "../components/ui/textarea";
 import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import { Toast, useToast } from "../components/Toast";
+import ConfirmDialog from "../components/ConfirmDialog";
 import api from "../api";
 import type { Interview, User, Section, ObjectifBilanAnswer } from "../types";
 import { formatDate } from "../lib/utils";
@@ -29,6 +30,7 @@ export default function InterviewDetail() {
   const [dateRealisation, setDateRealisation] = useState("");
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const { toast, show, setToast } = useToast();
 
   const { data: currentUser } = useQuery<User>({
@@ -93,12 +95,33 @@ export default function InterviewDetail() {
     });
   };
 
-  const handleSave = async (newStatus?: string) => {
+  const isTableRowEmpty = (row: (string | number | null)[]) =>
+    row.every((cell) => cell === null || cell === undefined || cell === "");
+
+  const hasEmptyTableRows = (secs: Section[]) =>
+    secs.some((section) =>
+      section.questions.some(
+        (q) => q.type === "table" && Array.isArray(q.answer) && (q.answer as (string | number | null)[][]).some(isTableRowEmpty),
+      ),
+    );
+
+  const removeEmptyTableRows = (secs: Section[]): Section[] =>
+    secs.map((section) => ({
+      ...section,
+      questions: section.questions.map((q) =>
+        q.type === "table" && Array.isArray(q.answer)
+          ? { ...q, answer: (q.answer as (string | number | null)[][]).filter((row) => !isTableRowEmpty(row)) }
+          : q,
+      ),
+    }));
+
+  const handleSave = async (newStatus?: string, sectionsOverride?: Section[]) => {
     if (!interview) return;
+    const sectionsToSave = sectionsOverride || sections;
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
-        content: { ...interview.content, sections, lieu: interview.employee_detail?.site_name || "" },
+        content: { ...interview.content, sections: sectionsToSave, lieu: interview.employee_detail?.site_name || "" },
         date_realisation: dateRealisation || null,
       };
       if (newStatus) {
@@ -188,7 +211,16 @@ export default function InterviewDetail() {
             </Button>
           )}
           {(interview.status === "draft" || interview.status === "in_progress") && (
-            <Button size="sm" onClick={() => handleSave("completed")}>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (hasEmptyTableRows(sections)) {
+                  setShowFinalizeConfirm(true);
+                } else {
+                  handleSave("completed");
+                }
+              }}
+            >
               <CheckCircle2 className="mr-1 h-4 w-4" />
               Finaliser
             </Button>
@@ -645,6 +677,22 @@ export default function InterviewDetail() {
         </div>
       )}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <ConfirmDialog
+        open={showFinalizeConfirm}
+        title="Lignes de tableau incomplètes"
+        message="Certaines lignes d'un ou plusieurs tableaux ne sont pas remplies. Les lignes vides seront supprimées si vous finalisez. Voulez-vous quand même finaliser l'entretien ?"
+        confirmLabel="Finaliser"
+        cancelLabel="Annuler"
+        confirmVariant="default"
+        onConfirm={() => {
+          setShowFinalizeConfirm(false);
+          const cleaned = removeEmptyTableRows(sections);
+          setSections(cleaned);
+          handleSave("completed", cleaned);
+        }}
+        onCancel={() => setShowFinalizeConfirm(false)}
+      />
     </AppLayout>
   );
 }
