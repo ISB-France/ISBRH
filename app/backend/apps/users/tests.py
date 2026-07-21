@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.users.backends import OIDCAuthenticationBackend
 from apps.users.models import Augmentation, Evolution, Formation, Position, User
 
 
@@ -613,3 +614,26 @@ class ExportHistoryXlsxTests(TestCase):
         self.client.force_authenticate(user=self.manager)
         response = self.client.get(f"/api/users/{self.employee.id}/export_history_xlsx/")
         self.assertEqual(response.status_code, 403)
+
+
+class OIDCCreateUserMatriculeTests(TestCase):
+    """Le matricule etant desormais obligatoire et unique sur User, le
+    provisioning SSO (qui ne recoit jamais de matricule dans les claims
+    Entra ID) doit toujours en generer un automatiquement, y compris
+    quand un utilisateur existant a deja un matricule vide."""
+
+    def setUp(self):
+        self.backend = OIDCAuthenticationBackend()
+
+    def test_create_user_generates_matricule_even_with_existing_blank_matricule_user(self):
+        User.objects.create_user(
+            username="legacy@example.com", email="legacy@example.com", password="x", role="employee",
+        )
+        user = self.backend.create_user({"email": "sso1@example.com", "given_name": "SSO", "family_name": "User"})
+        self.assertNotEqual(user.matricule, "")
+        self.assertTrue(user.matricule)
+
+    def test_two_consecutive_sso_users_get_different_matricules(self):
+        user1 = self.backend.create_user({"email": "sso2@example.com"})
+        user2 = self.backend.create_user({"email": "sso3@example.com"})
+        self.assertNotEqual(user1.matricule, user2.matricule)
