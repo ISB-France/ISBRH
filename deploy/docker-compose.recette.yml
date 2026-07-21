@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${DB_USER:-isbrh}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-isbrh}
     ports:
-      - "5435:5432"
+      - "${DB_HOST_PORT:-5435}:5432"
     volumes:
       - pgdata-recette:/var/lib/postgresql/data
     restart: unless-stopped
