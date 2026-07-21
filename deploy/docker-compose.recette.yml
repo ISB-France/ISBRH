@@ -13,7 +13,7 @@ services:
 
   backend:
     build:
-      context: ./app/backend
+      context: ../app/backend
       dockerfile: Dockerfile.prod
     env_file: /etc/isbrh/.recette.env
     depends_on:
@@ -23,7 +23,7 @@ services:
 
   frontend:
     build:
-      context: .
+      context: ..
       dockerfile: app/frontend/Dockerfile.prod
     ports:
       - "3005:80"
