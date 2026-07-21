@@ -19,7 +19,7 @@ Utilisateurs / collaborateurs. Table principale héritée de `AbstractUser` Djan
 | `is_active` | `bool` | NOT NULL | Compte actif |
 | `date_joined` | `timestamptz` | NOT NULL | Date de création du compte |
 | `username` | `varchar(150)` | UNIQUE NOT NULL | Hérité d'AbstractUser (auto-assigné = email) |
-| `email` | `varchar(254)` | UNIQUE NOT NULL | Email professionnel (USERNAME_FIELD) |
+| `email` | `varchar(254)` | UNIQUE | Email professionnel (USERNAME_FIELD) ; optionnel, un email temporaire `{matricule}@sansemail.isb.fr` est généré si absent |
 | `first_name` | `varchar(150)` | | Prénom |
 | `last_name` | `varchar(150)` | | Nom |
 | `role` | `varchar(20)` | NOT NULL default `employee` | `admin` / `rh` / `manager` / `employee` / `stagiaire` / `alternant` |
@@ -29,7 +29,7 @@ Utilisateurs / collaborateurs. Table principale héritée de `AbstractUser` Djan
 | `photo` | `varchar(100)` | nullable | Chemin photo de profil |
 | `icon` | `varchar(10)` | default `''` | Émoji (remplace la photo) |
 | `preferences` | `text` | default `''` | JSON (thème couleur, etc.) |
-| `matricule` | `varchar(50)` | UNIQUE | Matricule (auto-généré 8 chiffres si vide) |
+| `matricule` | `varchar(50)` | UNIQUE NOT NULL | Matricule obligatoire |
 | `hire_date` | `date` | nullable | Date d'entrée |
 | `date_sortie` | `date` | nullable | Date de sortie |
 | `type_contrat` | `varchar(20)` | | `cdi` / `cdd` / `interim` / `alternance` / `stage` |
@@ -115,6 +115,25 @@ Augmentations salariales.
 | `created_at` | `timestamptz` | NOT NULL | Date d'import |
 
 **Index :** `employee_id`
+
+---
+
+### `users_evolution`
+Historique des évolutions de carrière d'un collaborateur (poste, service, site, statut, niveau, coefficient, salaire). Une ligne = un changement daté, alimenté par l'import évolutions ou le suivi automatique des modifications de `users_user`.
+
+| Colonne | Type | Contraintes | Description |
+|---|---|---|---|
+| `id` | `serial` | PK | |
+| `employee_id` | `int4` | FK → `users_user.id` NOT NULL (PROTECT) | Collaborateur concerné |
+| `type_evolution` | `varchar(20)` | NOT NULL | `poste` / `service` / `site` / `statut` / `niveau` / `coefficient` / `salaire` |
+| `ancienne_valeur` | `varchar(255)` | | Valeur avant l'évolution |
+| `nouvelle_valeur` | `varchar(255)` | | Valeur après l'évolution |
+| `date_effet` | `date` | nullable | Date de prise d'effet |
+| `auteur_id` | `int4` | FK → `users_user.id` nullable (SET_NULL) | Auteur de la modification (vide si créé par import) |
+| `created_at` | `timestamptz` | NOT NULL | Date de création de l'enregistrement |
+
+**Index :** `employee_id`, `auteur_id`
+**Tri par défaut :** `-date_effet`, `-created_at`
 
 ---
 
@@ -219,6 +238,10 @@ users_formation
 users_augmentation
   └─ employee_id ─→ users_user.id
 
+users_evolution
+  ├─ employee_id ─→ users_user.id
+  └─ auteur_id ───→ users_user.id (nullable)
+
 users_notification
   └─ user_id ─────→ users_user.id
 
@@ -286,6 +309,16 @@ erDiagram
         numeric montant
     }
 
+    users_evolution {
+        int id PK
+        int employee_id FK
+        varchar type_evolution
+        varchar ancienne_valeur
+        varchar nouvelle_valeur
+        date date_effet
+        int auteur_id FK
+    }
+
     users_notification {
         int id PK
         int user_id FK
@@ -323,6 +356,8 @@ erDiagram
 
     users_user ||--o{ users_formation : "formations"
     users_user ||--o{ users_augmentation : "augmentations"
+    users_user ||--o{ users_evolution : "evolutions"
+    users_user ||--o{ users_evolution : "as auteur"
     users_user ||--o{ users_notification : "notifications"
     users_user ||--o{ interviews_interview : "as employee"
     users_user ||--o{ interviews_interview : "as manager"
