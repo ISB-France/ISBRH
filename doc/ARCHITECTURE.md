@@ -43,6 +43,10 @@
 - content : JSON (réponses aux questions)
 - document : fichier uploadé
 - Signature électronique via checkbox
+- À la création (unitaire ou via génération de campagne), `apply_default_sections()` (`apps/interviews/views.py`) complète automatiquement les sections issues du template :
+  - une section **"Commentaire"** (id `commentaires`) est ajoutée si absente, avec deux questions textarea fixes : `commentaire_collaborateur` ("Commentaire du collaborateur") et `commentaire_manager` ("Commentaire du manager")
+  - toute question de type `table` sans réponse démarre avec **5 lignes vides** par défaut (au lieu de 0)
+- À la finalisation (passage à `completed`), le frontend (`InterviewDetail.tsx`) détecte les lignes de tableau restées vides (5 par défaut ou ajoutées manuellement) et affiche une confirmation avant de finaliser ; les lignes vides sont supprimées automatiquement si l'utilisateur confirme
 
 #### Campaign (campagne)
 - nom, description, template (FK)
