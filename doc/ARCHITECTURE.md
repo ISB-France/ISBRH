@@ -18,7 +18,7 @@
 │           └── lib/           # Utilitaires
 ├── doc/                  # Documentation
 │   └── guides/           # Guides (Entra ID, branches)
-├── docker-compose.yml    # 4 services : db, backend, frontend, adminer
+├── docker-compose.dev.yml # 4 services (dev local) : db, backend, frontend, adminer
 └── .env                  # Variables d'environnement
 ```
 
@@ -163,11 +163,11 @@ Le thème actif est :
 ### Développement
 
 ```bash
-docker compose up -d                          # Lancer tous les services
-docker compose logs -f backend                # Voir les logs backend
-docker compose exec backend python manage.py migrate   # Migrations
-docker compose exec backend python manage.py createsuperuser  # Admin
-docker compose restart backend                # Redémarrer un service
+docker compose -f docker-compose.dev.yml up -d                          # Lancer tous les services
+docker compose -f docker-compose.dev.yml logs -f backend                # Voir les logs backend
+docker compose -f docker-compose.dev.yml exec backend python manage.py migrate   # Migrations
+docker compose -f docker-compose.dev.yml exec backend python manage.py createsuperuser  # Admin
+docker compose -f docker-compose.dev.yml restart backend                # Redémarrer un service
 ```
 
 Le premier utilisateur créé (via le login dev) reçoit automatiquement le rôle RH.
@@ -217,18 +217,18 @@ Les notifications sont créées automatiquement quand :
 
 ```bash
 # Créer les notifications d'échéance
-docker compose exec backend python manage.py check_upcoming
+docker compose -f docker-compose.dev.yml exec backend python manage.py check_upcoming
 
 # Ouvrir une session shell Django
-docker compose exec backend python manage.py shell
+docker compose -f docker-compose.dev.yml exec backend python manage.py shell
 
 # Voir les logs d'un service
-docker compose logs -f backend
-docker compose logs -f frontend
+docker compose -f docker-compose.dev.yml logs -f backend
+docker compose -f docker-compose.dev.yml logs -f frontend
 
 # Redémarrer tous les services
-docker compose restart
+docker compose -f docker-compose.dev.yml restart
 
 # Rebuild après modification des dépendances
-docker compose up -d --build backend
+docker compose -f docker-compose.dev.yml up -d --build backend
 ```
