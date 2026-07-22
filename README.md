@@ -1,4 +1,4 @@
-# ISBoard
+# ISBRH
 
 Gestion des entretiens annuels et professionnels — ISB France.
 
@@ -13,9 +13,15 @@ Gestion des entretiens annuels et professionnels — ISB France.
 ## Démarrage rapide
 
 ```bash
-cp .env.example .env        # puis remplir les variables
-docker compose up -d        # lance db + backend + frontend + adminer
+cp .env.example .env                        # puis remplir les variables
+docker compose -f docker-compose.dev.yml up -d   # lance db + backend + frontend + adminer
 ```
+
+> ⚠️ Ce fichier (`docker-compose.dev.yml`) est réservé au **développement local**. Il ne doit
+> jamais être présent/utilisé sur un serveur de recette ou de production — voir
+> [deploy/README.md](deploy/README.md) pour les compose files de déploiement
+> (`deploy/docker-compose.recette.yml` / `deploy/docker-compose.prod.yml`), qui doivent
+> toujours être invoqués explicitement avec `-f`.
 
 - Frontend : http://localhost:5175
 - Backend API : http://localhost:8002

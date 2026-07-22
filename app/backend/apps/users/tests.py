@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.users.backends import OIDCAuthenticationBackend
 from apps.users.models import Augmentation, Evolution, Formation, Position, User
 
 
@@ -37,7 +38,7 @@ class ProdSettingsSafetyTests(SimpleTestCase):
 
     def test_boot_fails_in_prod_without_explicit_secret_key(self):
         result = self._boot_with_env(
-            {"DEBUG": "False", "ALLOWED_HOSTS": "isboard.example.com"},
+            {"DEBUG": "False", "ALLOWED_HOSTS": "isbrh.example.com"},
             unset=("DJANGO_SECRET_KEY",),
         )
         self.assertNotEqual(result.returncode, 0)
@@ -58,7 +59,7 @@ class ProdSettingsSafetyTests(SimpleTestCase):
             {
                 "DEBUG": "False",
                 "DJANGO_SECRET_KEY": "a-real-secret-key",
-                "ALLOWED_HOSTS": "isboard.example.com",
+                "ALLOWED_HOSTS": "isbrh.example.com",
             }
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -213,6 +214,7 @@ class AdminRoleProtectionTests(TestCase):
             email="admin2@example.com",
             password="pass1234",
             role="admin",
+            matricule="00000777",
         )
         response = self.client.put(
             f"/api/users/{admin_user.id}/",
@@ -221,6 +223,7 @@ class AdminRoleProtectionTests(TestCase):
                 "first_name": "Admin",
                 "last_name": "Modifié",
                 "role": "admin",
+                "matricule": admin_user.matricule,
             },
             format="json",
         )
@@ -611,3 +614,26 @@ class ExportHistoryXlsxTests(TestCase):
         self.client.force_authenticate(user=self.manager)
         response = self.client.get(f"/api/users/{self.employee.id}/export_history_xlsx/")
         self.assertEqual(response.status_code, 403)
+
+
+class OIDCCreateUserMatriculeTests(TestCase):
+    """Le matricule etant desormais obligatoire et unique sur User, le
+    provisioning SSO (qui ne recoit jamais de matricule dans les claims
+    Entra ID) doit toujours en generer un automatiquement, y compris
+    quand un utilisateur existant a deja un matricule vide."""
+
+    def setUp(self):
+        self.backend = OIDCAuthenticationBackend()
+
+    def test_create_user_generates_matricule_even_with_existing_blank_matricule_user(self):
+        User.objects.create_user(
+            username="legacy@example.com", email="legacy@example.com", password="x", role="employee",
+        )
+        user = self.backend.create_user({"email": "sso1@example.com", "given_name": "SSO", "family_name": "User"})
+        self.assertNotEqual(user.matricule, "")
+        self.assertTrue(user.matricule)
+
+    def test_two_consecutive_sso_users_get_different_matricules(self):
+        user1 = self.backend.create_user({"email": "sso2@example.com"})
+        user2 = self.backend.create_user({"email": "sso3@example.com"})
+        self.assertNotEqual(user1.matricule, user2.matricule)

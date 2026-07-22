@@ -23,7 +23,7 @@ cd "$DEPLOY_PATH"
 
 git pull origin "$ENV"
 
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" -p "isboard-$ENV" up -d --build
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" -p "isbrh-$ENV" up -d --build
 
 docker image prune -f
 

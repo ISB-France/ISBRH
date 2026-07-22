@@ -7,11 +7,12 @@ interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  confirmVariant?: "default" | "destructive";
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export default function ConfirmDialog({ open, title, message, confirmLabel = "Confirmer", cancelLabel = "Annuler", onConfirm, onCancel }: ConfirmDialogProps) {
+export default function ConfirmDialog({ open, title, message, confirmLabel = "Confirmer", cancelLabel = "Annuler", confirmVariant = "destructive", onConfirm, onCancel }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = "Co
       <p className="mb-6 text-sm text-muted-foreground">{message}</p>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel}>{cancelLabel}</Button>
-        <Button type="button" variant="destructive" onClick={onConfirm}>{confirmLabel}</Button>
+        <Button type="button" variant={confirmVariant} onClick={onConfirm}>{confirmLabel}</Button>
       </div>
     </dialog>
   );

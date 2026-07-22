@@ -10,6 +10,7 @@ interface DateInputProps {
   onChange: (value: string) => void;
   required?: boolean;
   placeholder?: string;
+  disabled?: boolean;
 }
 
 function parseDisplay(display: string): Date | undefined {
@@ -26,14 +27,16 @@ function dateToDisplay(date: Date): string {
   return format(date, "dd/MM/yyyy");
 }
 
-export function DateInput({ value, onChange, required, placeholder }: DateInputProps) {
+export function DateInput({ value, onChange, required, placeholder, disabled }: DateInputProps) {
   const selected = parseDisplay(value);
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="outline"
+          disabled={disabled}
           className={cn(
             "h-10 w-full justify-start gap-2 px-3 text-left font-normal",
             !selected && "text-muted-foreground",
@@ -51,6 +54,10 @@ export function DateInput({ value, onChange, required, placeholder }: DateInputP
             if (date) onChange(dateToDisplay(date));
           }}
           autoFocus
+          classNames={{ selected: "rounded-full" }}
+          modifiersStyles={{
+            selected: { backgroundColor: "#f6b8b8", color: "#7f1d1d" },
+          }}
         />
       </PopoverContent>
       {required && (

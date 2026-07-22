@@ -1,3 +1,4 @@
+import copy
 from datetime import timedelta
 from django.db.models import Count
 from django.http import HttpResponse
@@ -69,6 +70,36 @@ def build_previous_year_bilan_sections(employee, interview_type):
         if questions:
             bilan_sections.append({"id": new_id, "title": new_title, "questions": questions})
     return bilan_sections
+
+
+DEFAULT_TABLE_ROWS = 5
+
+COMMENT_SECTION_ID = "commentaires"
+
+
+def apply_default_sections(sections):
+    """Complete une liste de sections d'entretien avant creation :
+    - toute question de type "table" sans reponse demarre avec
+      DEFAULT_TABLE_ROWS lignes vides (au lieu de 0) ;
+    - une section "Commentaire" (commentaire collaborateur + manager) est
+      ajoutee par defaut si elle n'est pas deja presente."""
+    sections = copy.deepcopy(list(sections))
+    for section in sections:
+        for question in section.get("questions", []):
+            if question.get("type") == "table" and not question.get("answer"):
+                nb_cols = len(question.get("columns") or [{}])
+                question["answer"] = [[None] * nb_cols for _ in range(DEFAULT_TABLE_ROWS)]
+
+    if not any(s.get("id") == COMMENT_SECTION_ID for s in sections):
+        sections.append({
+            "id": COMMENT_SECTION_ID,
+            "title": "Commentaire",
+            "questions": [
+                {"id": "commentaire_collaborateur", "label": "Commentaire du collaborateur", "type": "textarea", "answer": ""},
+                {"id": "commentaire_manager", "label": "Commentaire du manager", "type": "textarea", "answer": ""},
+            ],
+        })
+    return sections
 
 
 class InterviewPermission(permissions.BasePermission):
@@ -185,6 +216,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
             bilan_sections = build_previous_year_bilan_sections(employee, interview_type)
             if bilan_sections:
                 content["sections"] = bilan_sections + list(content.get("sections", []))
+        content["sections"] = apply_default_sections(content.get("sections", []))
         serializer.validated_data["content"] = content
         serializer.save(manager=self.request.user)
 
@@ -492,6 +524,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             bilan_sections = build_previous_year_bilan_sections(user, template.type)
             if bilan_sections:
                 sections = bilan_sections + sections
+            sections = apply_default_sections(sections)
             _, was_created = Interview.objects.get_or_create(
                 campaign=campaign,
                 employee=user,

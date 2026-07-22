@@ -1,6 +1,8 @@
 # Imports CSV
 
-Quatre imports sont disponibles depuis la page **Utilisateurs** (réservé aux rôles RH/Admin), plus un import de modèles d'entretien depuis la page **Modèles** (réservé aux rôles RH/Admin/Manager).
+Cinq imports sont disponibles depuis la page **Utilisateurs** (réservé aux rôles RH/Admin), plus un import de modèles d'entretien depuis la page **Modèles** (réservé aux rôles RH/Admin/Manager).
+
+ℹ️ La création manuelle d'un utilisateur via le formulaire (page **Utilisateurs**) suit la même règle que l'import Kostango : **Prénom, Nom et Matricule sont obligatoires, l'email est optionnel**. S'il est laissé vide, un email temporaire `{matricule}@sansemail.isb.fr` est généré automatiquement.
 
 ---
 
@@ -8,50 +10,54 @@ Quatre imports sont disponibles depuis la page **Utilisateurs** (réservé aux r
 
 **Endpoint :** `POST /api/users/import_kostango/`
 
-Import principal depuis l'export Kostango. Crée ou met à jour les utilisateurs par **email**.
+Import principal depuis l'export Kostango. Crée ou met à jour les utilisateurs par **matricule**.
 
 ### Colonnes du CSV
 
-| Colonne | Description | Exemple |
-|---|---|---|
-| `personne email` | Email (clé de liaison) | `jean.dupont@isb.fr` |
-| `Prénom` | Prénom | `Jean` |
-| `Nom` | Nom | `DUPONT` |
-| `Matricule` | Matricule unique | `00000001` |
-| `Date de naissance` | Date de naissance | `15/03/1985` |
-| `Date d'embauche` | Date d'entrée | `01/09/2020` |
-| `Date de sortie` | Date de sortie (vide si actif) | `31/12/2024` |
-| `Sexe` | `Homme` / `Femme` | `Homme` |
-| `Site (nom complet)` | Site (chemin complet, dernier segment utilisé) | `ISB France > Paris` |
-| `Poste` | Intitulé du poste | `Développeur` |
-| `Type contrat` | `CDI` / `CDD` / `Intérim` / `Alternance` / `Stage` | `CDI` |
-| `Statut` | Statut RH (`Cadre`/`FJ`/etc.) | `Cadre` |
-| `Coefficient` | Coefficient | `250` |
-| `Forfait jour` | `true` / `false` | `true` |
-| `Tickets restaurant` | `true` / `false` | `true` |
-| `Agence d'intérim` | Agence (intérim uniquement) | `Supplay` |
-| `valideur N+1` | Nom complet du N+1 (résolu en 2ème passe) | `Marie MARTIN` |
+| Colonne | Description | Exemple | Obligatoire |
+|---|---|---|---|
+| `Prénom` | Prénom | `Jean` | **oui** |
+| `Nom` | Nom | `DUPONT` | **oui** |
+| `Matricule` | Matricule unique (clé de liaison) | `00000001` | **oui** |
+| `personne email` | Email ; si absent, un email temporaire est généré (`{matricule}@kostango.isb.fr`) | `jean.dupont@isb.fr` | non |
+| `Date de naissance` | Date de naissance | `15/03/1985` | non |
+| `Date d'embauche` | Date d'entrée | `01/09/2020` | non |
+| `Date de sortie` | Date de sortie (vide si actif) | `31/12/2024` | non |
+| `Sexe` | `Homme` / `Femme` | `Homme` | non |
+| `Site (nom complet)` | Site (chemin complet, dernier segment utilisé) | `ISB France > Paris` | non |
+| `Poste` | Intitulé du poste | `Développeur` | non |
+| `Type contrat` | `CDI` / `CDD` / `Intérim` / `Alternance` / `Stage` | `CDI` | non |
+| `Statut` | Statut RH (`Cadre`/`FJ`/etc.) | `Cadre` | non |
+| `Coefficient` | Coefficient | `250` | non |
+| `Forfait jour` | `true` / `false` | `true` | non |
+| `Tickets restaurant` | `true` / `false` | `true` | non |
+| `Agence d'intérim` | Agence (intérim uniquement) | `Supplay` | non |
+| `valideur N+1` | Nom complet du N+1 (résolu en 2ème passe) | `Marie MARTIN` | non |
 
 ### Règles
-- **Clé :** `personne email`
+- **Clé :** `Matricule`
+- **Obligatoires :** `Prénom`, `Nom`, `Matricule` — une ligne sans l'un de ces trois champs est rejetée avec une erreur explicite
+- `personne email` est optionnel : si absent, un email temporaire `{matricule}@kostango.isb.fr` est généré automatiquement
 - Création ou mise à jour (synchronisation) des champs ci-dessus
 - `Cadre` et `Forfait jour` déduits du `Statut` Kostango
-- Le `valideur N+1` est résolu dans un second temps pour établir la hiérarchie
+- Le `valideur N+1` est résolu dans un second temps pour établir la hiérarchie (recherche par nom complet)
 - Les managers sont promus automatiquement (passage en rôle `manager`)
 
 ### Exemple de ligne
 ```
-personne email,Prénom,Nom,Matricule,Date de naissance,Date d'embauche,Date de sortie,Sexe,Site (nom complet),Poste,Type contrat,Statut,Coefficient,Forfait jour,Tickets restaurant,Agence d'intérim,valideur N+1
-jean.dupont@isb.fr,Jean,DUPONT,00000001,15/03/1985,01/09/2020,,Homme,ISB France > Paris,Développeur,CDI,Cadre,250,true,true,,Marie MARTIN
+Prénom,Nom,Matricule,personne email,Date de naissance,Date d'embauche,Date de sortie,Sexe,Site (nom complet),Poste,Type contrat,Statut,Coefficient,Forfait jour,Tickets restaurant,Agence d'intérim,valideur N+1
+Jean,DUPONT,00000001,jean.dupont@isb.fr,15/03/1985,01/09/2020,,Homme,ISB France > Paris,Développeur,CDI,Cadre,250,true,true,,Marie MARTIN
 ```
 
 ---
 
-## 2. Import collaborateurs
+## 2. Import évolution professionnelle
 
 **Endpoint :** `POST /api/users/import_collaborateurs/`
 
 Fichier de base des collaborateurs (évolution professionnelle). Crée ou met à jour par **matricule**.
+
+⚠️ À ne pas confondre avec l'**import évolutions** (section 5 ci-dessous, `import_evolutions`) : celui-ci met à jour l'état courant du collaborateur (statut, niveau, coefficient, poste actuel...), alors que l'import évolutions crée un **historique** d'évolutions passées (une ligne = un changement daté).
 
 ### Colonnes du CSV
 
@@ -139,7 +145,37 @@ Matricule,Date,Montant Augmentation
 
 ---
 
-## 5. Import modèles d'entretien
+## 5. Import évolutions
+
+**Endpoint :** `POST /api/users/import_evolutions/`
+
+Import de masse d'évolutions historiques (poste, service, site, statut, niveau, coefficient, salaire) pour alimenter la timeline de carrière d'un collaborateur. Chaque ligne est une évolution. Rapprochement par **matricule**.
+
+### Colonnes du CSV
+
+| Colonne | Description | Exemple |
+|---|---|---|
+| `Matricule` | Matricule du collaborateur (doit déjà exister) | `00000001` |
+| `Type` | `poste` / `service` / `site` / `statut` / `niveau` / `coefficient` / `salaire` | `poste` |
+| `Ancienne valeur` | Valeur avant l'évolution | `Développeur` |
+| `Nouvelle valeur` | Valeur après l'évolution | `Développeur senior` |
+| `Date d'effet` | Date de prise d'effet | `01/09/2024` |
+
+### Règles
+- **Clé :** `Matricule` (doit correspondre à un utilisateur existant)
+- Création uniquement (pas de mise à jour / dédoublonnage)
+- `Type` est validé contre la liste ci-dessus (insensible à la casse) ; une valeur invalide rejette la ligne
+- `Date d'effet` accepte `JJ/MM/AAAA`, `AAAA-MM-JJ` ou `JJ/MM/AA` ; vide si absente ou non reconnue
+
+### Exemple de ligne
+```
+Matricule,Type,Ancienne valeur,Nouvelle valeur,Date d'effet
+00000001,poste,Développeur,Développeur senior,01/09/2024
+```
+
+---
+
+## 6. Import modèles d'entretien
 
 **Endpoint :** `POST /api/interview-templates/import_csv/`
 
@@ -186,28 +222,31 @@ Entretien annuel,annual,Modèle standard,s1,Bilan de l'année,q1,Principales ré
 ## Ordre d'import recommandé
 
 1. **Import Kostango** — crée la base des salariés avec leur **email réel** et leur matricule
-2. **Import collaborateurs** — vient ensuite compléter/mettre à jour les mêmes personnes par **matricule**
+2. **Import évolution professionnelle** — vient ensuite compléter/mettre à jour les mêmes personnes par **matricule**
 3. **Import formations** — les formations sont rattachées aux matricules existants
 4. **Import augmentations** — les augmentations sont rattachées aux matricules existants
+5. **Import évolutions** — les évolutions sont rattachées aux matricules existants
 
-⚠️ **Toujours importer Kostango avant collaborateurs.** Si un collaborateur est
-importé via `import_collaborateurs` avant d'avoir été créé par `import_kostango`,
-et que son matricule n'est reconnu par aucun utilisateur existant, un compte est
-créé avec un **email temporaire** (`{matricule}@collaborateur.isb.fr`). Si ce même
-collaborateur est ensuite importé via Kostango (matching par email réel), Kostango
-ne retrouvera pas le compte temporaire (clé différente) et créera un **second**
-compte pour la même personne : c'est un doublon. Faire l'import Kostango en
-premier évite ce cas, puisque l'import collaborateurs retrouvera alors le compte
-existant par matricule et le mettra à jour au lieu d'en créer un nouveau.
+⚠️ **Toujours importer Kostango avant l'évolution professionnelle.** Si un
+collaborateur est importé via `import_collaborateurs` avant d'avoir été créé
+par `import_kostango`, et que son matricule n'est reconnu par aucun utilisateur
+existant, un compte est créé avec un **email temporaire**
+(`{matricule}@collaborateur.isb.fr`). Si ce même collaborateur est ensuite
+importé via Kostango (matching par email réel), Kostango ne retrouvera pas le
+compte temporaire (clé différente) et créera un **second** compte pour la même
+personne : c'est un doublon. Faire l'import Kostango en premier évite ce cas,
+puisque l'import évolution professionnelle retrouvera alors le compte existant
+par matricule et le mettra à jour au lieu d'en créer un nouveau.
 
 Chaque création d'utilisateur avec un email temporaire lors de l'import
-collaborateurs est signalée par un `WARNING` dans les logs applicatifs
-(`apps.users.views`) : `Aucun utilisateur trouvé pour le matricule X, création
-avec email temporaire`. Surveillez ces logs après un import en masse.
+évolution professionnelle est signalée par un `WARNING` dans les logs
+applicatifs (`apps.users.views`) : `Aucun utilisateur trouvé pour le matricule
+X, création avec email temporaire`. Surveillez ces logs après un import en
+masse.
 
 ## Détecter les doublons après import
 
-Après tout import en masse (Kostango et/ou collaborateurs), exécuter :
+Après tout import en masse (Kostango et/ou évolution professionnelle), exécuter :
 
 ```
 python manage.py detect_duplicate_users
@@ -216,15 +255,15 @@ python manage.py detect_duplicate_users
 Cette commande liste les utilisateurs potentiellement dupliqués : même
 prénom + nom + date de naissance, mais matricule et email différents (typiquement
 un compte créé par Kostango avec un email réel, et un second créé par l'import
-collaborateurs avec un email temporaire `@collaborateur.isb.fr`). Elle n'effectue
-aucune fusion automatique — la résolution (fusion manuelle ou suppression du
-compte temporaire) reste à la charge de l'équipe RH.
+évolution professionnelle avec un email temporaire `@collaborateur.isb.fr`). Elle
+n'effectue aucune fusion automatique — la résolution (fusion manuelle ou
+suppression du compte temporaire) reste à la charge de l'équipe RH.
 
 ## Dépannage
 
 - Les erreurs sont retournées ligne par ligne avec le détail
 - En cas d'échec partiel, les lignes valides sont tout de même importées
-- Le doublon sur `matricule` (collaborateurs) ou `email` (Kostango) déclenche une mise à jour, pas un rejet
+- Le doublon sur `matricule` (évolution professionnelle) ou `email` (Kostango) déclenche une mise à jour, pas un rejet
 - Le doublon **entre** les deux imports (personne créée deux fois, une fois par
   chacun) n'est pas détecté automatiquement à l'import : voir
   `detect_duplicate_users` ci-dessus
@@ -235,7 +274,7 @@ compte temporaire) reste à la charge de l'équipe RH.
 
 Non. L'import utilisateurs (Kostango) utilise l'**email** comme clé. Si vous importez `jean.dupont@isb.fr` avec le rôle `rh`, puis le même email avec le rôle `employee`, le second import **met à jour** l'utilisateur existant (son rôle deviendra `employee`). Il n'y a jamais de doublon sur un même email.
 
-### Et pour l'import collaborateurs (matricule) ?
+### Et pour l'import évolution professionnelle (matricule) ?
 
 Même principe : la clé est le **matricule**. Deux imports avec le même matricule = mise à jour du même utilisateur, pas de doublon.
 

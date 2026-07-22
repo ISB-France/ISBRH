@@ -24,7 +24,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-layout">
       <aside className="sidebar">
-        <h2>ISBoard</h2>
+        <h2>ISBRH</h2>
         <nav>
           <NavLink to="/" end>Tableau de bord</NavLink>
           <NavLink to="/interviews">Entretiens</NavLink>

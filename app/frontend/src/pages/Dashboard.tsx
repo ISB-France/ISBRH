@@ -52,6 +52,7 @@ export default function Dashboard() {
           <CardTitle>Répartition par type</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase text-muted-foreground">
@@ -72,6 +73,7 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </AppLayout>

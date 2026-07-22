@@ -101,6 +101,7 @@ export default function Templates() {
 
       <Card>
         <CardContent className="p-0">
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase text-muted-foreground">
@@ -148,6 +149,7 @@ export default function Templates() {
               ))}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
 

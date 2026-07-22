@@ -1,0 +1,15 @@
+[Unit]
+Description=ISBRH Production
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/var/www/app-prod
+ExecStart=/usr/bin/docker compose -f deploy/docker-compose.prod.yml --env-file /etc/isbrh/prod.env -p isbrh-prod up -d
+ExecStop=/usr/bin/docker compose -f deploy/docker-compose.prod.yml -p isbrh-prod down
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target

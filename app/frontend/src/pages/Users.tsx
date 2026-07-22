@@ -249,6 +249,7 @@ export default function Users() {
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
             </div>
           )}
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border text-left text-xs font-semibold uppercase text-muted-foreground">
@@ -360,6 +361,7 @@ export default function Users() {
               })}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

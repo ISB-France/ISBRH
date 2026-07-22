@@ -1,4 +1,4 @@
-# Déploiement — ISBoard
+# Déploiement — ISBRH
 
 ## Architecture
 
@@ -20,8 +20,8 @@
 
 | Environnement | Chemin code | Fichier .env | Branche |
 |---|---|---|---|
-| Production | `/var/www/app-prod` | `/etc/isboard/prod.env` | `main` |
-| Recette | `/var/www/app-recette` | `/etc/isboard/recette.env` | `recette` |
+| Production | `/var/www/app-prod` | `/etc/isbrh/prod.env` | `main` |
+| Recette | `/var/www/app-recette` | `/etc/isbrh/recette.env` | `recette` |
 
 ## Workflow Git
 
@@ -41,8 +41,8 @@ dev ──→ recette ──→ main
 sudo bash /var/www/app-prod/deploy/scripts/setup-server.sh
 
 # 2. Éditer les fichiers .env (hors du dossier servi)
-nano /etc/isboard/prod.env
-nano /etc/isboard/recette.env
+nano /etc/isbrh/prod.env
+nano /etc/isbrh/recette.env
 
 # 3. Ajouter les secrets dans GitHub
 # Settings → Secrets and variables → Actions
@@ -62,12 +62,12 @@ nano /etc/isboard/recette.env
 
 ```bash
 # Voir les logs d'un environnement
-docker compose -p isboard-prod logs -f
-docker compose -p isboard-recette logs -f
+docker compose -p isbrh-prod logs -f
+docker compose -p isbrh-recette logs -f
 
 # Redémarrer un environnement
-docker compose -p isboard-prod restart
+docker compose -p isbrh-prod restart
 
 # Stopper un environnement
-docker compose -p isboard-recette down
+docker compose -p isbrh-recette down
 ```

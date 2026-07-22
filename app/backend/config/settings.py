@@ -70,9 +70,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME", "isboard"),
-        "USER": os.environ.get("DB_USER", "isboard"),
-        "PASSWORD": os.environ.get("DB_PASSWORD", "isboard"),
+        "NAME": os.environ.get("DB_NAME", "isbrh"),
+        "USER": os.environ.get("DB_USER", "isbrh"),
+        "PASSWORD": os.environ.get("DB_PASSWORD", "isbrh"),
         "HOST": os.environ.get("DB_HOST", "db"),
         "PORT": os.environ.get("DB_PORT", "5432"),
     }
@@ -163,3 +163,10 @@ LOGGING = {
         },
     },
 }
+
+# Reverse proxy settings
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Force OIDC redirect URI
+USE_X_FORWARDED_PORT = True

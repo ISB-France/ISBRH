@@ -321,7 +321,7 @@ export default function UserForm() {
             <CardTitle>Identité</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Prénom <span className="text-red-500">*</span></label>
                 <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
@@ -332,10 +332,10 @@ export default function UserForm() {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium">Email <span className="text-red-500">*</span></label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <label className="mb-1.5 block text-sm font-medium">Email</label>
+              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <SelectField label="Sexe" value={sexe} onChange={setSexe} options={[
                 { value: "homme", label: "Homme" },
                 { value: "femme", label: "Femme" },
@@ -410,9 +410,9 @@ export default function UserForm() {
             <CardTitle>Contrat</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Matricule</label>
+                <label className="mb-1.5 block text-sm font-medium">Matricule <span className="text-red-500">*</span></label>
                 <Input
                   value={matricule}
                   onChange={(e) => setMatricule(e.target.value)}
@@ -429,7 +429,7 @@ export default function UserForm() {
                 <DateInput value={hireDate} onChange={setHireDate} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Date de sortie</label>
                 <DateInput value={dateSortie} onChange={setDateSortie} />

@@ -83,9 +83,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        <div className="flex items-center gap-3 px-6 py-6">
+        <div className="flex flex-col items-start gap-2 px-6 py-6">
           <img src="/logo-white.png" alt="ISB France" className="h-8 w-auto" />
-          <span className="font-display text-lg font-semibold text-primary-foreground">ISBoard</span>
+          <span className="font-display text-2xl font-semibold text-primary-foreground">ISBRH</span>
         </div>
         <nav className="flex-1 space-y-1 px-3">
           {navItems
@@ -127,7 +127,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <div className="flex flex-1 flex-col lg:ml-64">
+      <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-[#FDFAF5] px-6">
           <button className="lg:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
             {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -196,7 +196,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </Avatar>
           </button>
         </header>
-        <main className="flex-1 bg-background p-6 lg:p-8">{children}</main>
+        <main className="min-w-0 flex-1 bg-background p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

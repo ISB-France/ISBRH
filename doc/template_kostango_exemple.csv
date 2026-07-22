@@ -1,0 +1,3 @@
+Prénom,Nom,Matricule,personne email,Date de naissance,Date d'embauche,Date de sortie,Sexe,Site (nom complet),Poste,Type contrat,Statut,Coefficient,Forfait jour,Tickets restaurant,Agence d'intérim,valideur N+1
+Jean,DUPONT,00000001,jean.dupont@isb.fr,15/03/1985,01/09/2020,,Homme,ISB France > Paris,Développeur,CDI,Cadre,250,true,true,,Marie MARTIN
+Marie,MARTIN,00000002,,22/07/1980,01/01/2015,,Femme,ISB France > Paris,Responsable RH,CDI,Cadre,300,true,true,,

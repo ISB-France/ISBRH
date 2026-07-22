@@ -1,11 +1,15 @@
 import logging
+import re
 
 from django.conf import settings
 from django.core.exceptions import SuspiciousOperation
+from django.db import IntegrityError, transaction
 
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend as BaseOIDCBackend
 
 logger = logging.getLogger(__name__)
+
+MAX_MATRICULE_GENERATION_ATTEMPTS = 5
 
 
 class OIDCAuthenticationBackend(BaseOIDCBackend):
@@ -53,14 +57,38 @@ class OIDCAuthenticationBackend(BaseOIDCBackend):
 
         return None
 
+    def _next_matricule(self):
+        existing = self.UserModel.objects.exclude(matricule="").values_list("matricule", flat=True)
+        used = {m for m in existing if re.match(r"^\d+$", m)}
+        next_num = (max(int(m) for m in used) + 1) if used else 1
+        return f"{next_num:08d}"
+
     def create_user(self, claims):
         email = claims.get("email") or claims.get("preferred_username")
         logger.info("OIDC create_user - claims: %s", claims)
         logger.info("OIDC create_user - email: %s", email)
-        user = self.UserModel.objects.create_user(
-            username=email or f"user-{claims.get('sub', 'unknown')}",
-            email=email or f"{claims.get('sub', 'unknown')}@placeholder.isb",
-        )
+        username = email or f"user-{claims.get('sub', 'unknown')}"
+        user_email = email or f"{claims.get('sub', 'unknown')}@placeholder.isb"
+
+        # Le matricule est desormais obligatoire et unique sur User. Le SSO
+        # n'en fournit jamais (aucun claim Entra ID equivalent), donc on en
+        # genere un automatiquement, avec retry en cas de collision
+        # concurrente sur la contrainte unique.
+        for attempt in range(MAX_MATRICULE_GENERATION_ATTEMPTS):
+            matricule = self._next_matricule()
+            try:
+                with transaction.atomic():
+                    user = self.UserModel.objects.create_user(
+                        username=username,
+                        email=user_email,
+                        matricule=matricule,
+                    )
+                break
+            except IntegrityError:
+                if attempt == MAX_MATRICULE_GENERATION_ATTEMPTS - 1:
+                    raise
+                continue
+
         self.update_user(user, claims)
         return user
 
