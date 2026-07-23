@@ -151,8 +151,8 @@ class User(AbstractUser):
             )
         if self.role == self.Role.RH and self.manager_id:
             raise ValidationError("Un utilisateur avec le rôle RH ne peut pas avoir de manager (N+1).")
-        if self.manager_id and self.manager.role == self.Role.RH:
-            raise ValidationError("Un utilisateur avec le rôle RH ne peut pas être désigné comme manager (N+1).")
+        if self.manager_id and self.manager.role in (self.Role.RH, self.Role.ADMIN):
+            raise ValidationError("Un utilisateur avec le rôle RH ou Admin ne peut pas être désigné comme manager (N+1).")
         if not self.matricule:
             last = User.objects.filter(matricule__regex=r"^\d{8}$").order_by("matricule").last()
             if last:
