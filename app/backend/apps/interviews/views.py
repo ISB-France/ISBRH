@@ -565,7 +565,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                         },
                     },
                     "due_date": campaign.due_date,
-                    "manager": user.manager or request.user,
+                    "manager": user.manager,
                 },
             )
             if was_created:
@@ -578,8 +578,8 @@ class CampaignViewSet(viewsets.ModelViewSet):
         campaign = self.get_object()
         updated = 0
         for iv in campaign.interviews.select_related("employee").all():
-            new_manager = iv.employee.manager or request.user
-            if iv.manager_id != new_manager.id:
+            new_manager = iv.employee.manager
+            if iv.manager_id != (new_manager.id if new_manager else None):
                 iv.manager = new_manager
                 iv.save(update_fields=["manager"])
                 updated += 1
