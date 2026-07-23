@@ -287,6 +287,28 @@ class InterviewViewSet(viewsets.ModelViewSet):
             ])
         return response
 
+    @staticmethod
+    def _compute_anciennete(hire_date):
+        if not hire_date:
+            return None
+        from datetime import date
+
+        today = date.today()
+        years = today.year - hire_date.year
+        months = today.month - hire_date.month
+        if today.day < hire_date.day:
+            months -= 1
+        if months < 0:
+            months += 12
+            years -= 1
+
+        parts = []
+        if years > 0:
+            parts.append(f"{years} an" + ("s" if years > 1 else ""))
+        if months > 0 or not parts:
+            parts.append(f"{months} mois")
+        return " ".join(parts)
+
     def _get_print_context(self, interview):
         sections = interview.content.get("sections", [])
         all_past = list(Interview.objects.filter(employee=interview.employee, status__in=("completed", "signed")).exclude(pk=interview.pk).select_related("manager", "template").order_by("-created_at"))
@@ -329,6 +351,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
             "training_history": training_history,
             "salary_history": salary_chrono,
             "logo_data_uri": self._get_logo_data_uri(),
+            "anciennete": self._compute_anciennete(interview.employee.hire_date),
         }
 
     _logo_data_uri_cache = None
