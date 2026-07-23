@@ -782,7 +782,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 if service_name:
                     service, _ = Service.objects.get_or_create(name=service_name)
 
-                sexe_map = {"Homme": "homme", "Femme": "femme", "": ""}
+                sexe_map = {"Masculin": "homme", "Féminin": "femme", "Homme": "homme", "Femme": "femme", "": ""}
                 sexe = sexe_map.get(row.get("Sexe", "").strip(), "")
 
                 date_naissance = self._parse_date(row.get("Date de naissance", "").strip())
@@ -813,7 +813,9 @@ class UserViewSet(viewsets.ModelViewSet):
                 agence_interim = row.get("Agence d'intérim", "").strip()
 
                 # Déterminer le rôle applicatif
-                role = row.get("Rôle", "employee").strip().lower()
+                role_map = {"collaborateur": "employee", "manager": "manager"}
+                role_raw = row.get("Rôle", "").strip().lower()
+                role = role_map.get(role_raw, role_raw)
                 if role not in ("admin", "rh", "manager", "employee", "stagiaire", "alternant"):
                     role = "employee"
 
