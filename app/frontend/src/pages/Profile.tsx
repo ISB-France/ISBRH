@@ -36,7 +36,7 @@ export default function Profile() {
   if (isLoading) return <LoadingScreen />;
   if (!user) return null;
 
-  const initials = `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() || user.email[0].toUpperCase();
+  const initials = `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() || user.email?.[0]?.toUpperCase() || "?";
 
   const startEditing = () => {
     setIcon(user.icon || "");

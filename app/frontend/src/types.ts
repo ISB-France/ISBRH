@@ -15,7 +15,7 @@ export interface Position {
 
 export interface User {
   id: number;
-  email: string;
+  email: string | null;
   first_name: string;
   last_name: string;
   role: "admin" | "rh" | "manager" | "employee" | "stagiaire" | "alternant";
@@ -39,7 +39,6 @@ export interface User {
   forfait_jour: boolean;
   tickets_restaurant: boolean;
   cadre: boolean;
-  categorie_socio_pro: "" | "ouvrier" | "agent_maitrise" | "cadre";
 
   // Organisation
   service: number | null;
