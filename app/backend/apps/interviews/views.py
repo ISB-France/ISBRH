@@ -218,7 +218,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 content["sections"] = bilan_sections + list(content.get("sections", []))
         content["sections"] = apply_default_sections(content.get("sections", []))
         serializer.validated_data["content"] = content
-        serializer.save(manager=self.request.user)
+        serializer.save(manager=employee.manager if employee else None)
 
     def perform_update(self, serializer):
         employee = serializer.instance.employee
