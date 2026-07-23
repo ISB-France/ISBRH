@@ -777,6 +777,11 @@ class UserViewSet(viewsets.ModelViewSet):
                 if position_name:
                     position, _ = Position.objects.get_or_create(name=position_name)
 
+                service_name = row.get("Service", "").strip()
+                service = None
+                if service_name:
+                    service, _ = Service.objects.get_or_create(name=service_name)
+
                 sexe_map = {"Homme": "homme", "Femme": "femme", "": ""}
                 sexe = sexe_map.get(row.get("Sexe", "").strip(), "")
 
@@ -807,8 +812,10 @@ class UserViewSet(viewsets.ModelViewSet):
 
                 agence_interim = row.get("Agence d'intérim", "").strip()
 
-                # Déterminer le rôle
-                role = "employee"
+                # Déterminer le rôle applicatif
+                role = row.get("Rôle", "employee").strip().lower()
+                if role not in ("admin", "rh", "manager", "employee", "stagiaire", "alternant"):
+                    role = "employee"
 
                 # Déterminer cadre + forfait_jour depuis le statut Kostango
                 statut_kostango = row.get("Statut", "").strip()
@@ -827,6 +834,7 @@ class UserViewSet(viewsets.ModelViewSet):
                         "sexe": sexe,
                         "date_naissance": date_naissance,
                         "site": site,
+                        "service": service,
                         "position": position,
                         "type_contrat": type_contrat,
                         "statut": statut,
@@ -850,9 +858,11 @@ class UserViewSet(viewsets.ModelViewSet):
                         ("email", email),
                         ("first_name", first_name),
                         ("last_name", last_name),
+                        ("role", role),
                         ("sexe", sexe),
                         ("date_naissance", date_naissance),
                         ("site", site),
+                        ("service", service),
                         ("position", position),
                         ("type_contrat", type_contrat),
                         ("statut", statut),
