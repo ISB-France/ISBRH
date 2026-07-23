@@ -349,49 +349,49 @@ class UserViewSet(viewsets.ModelViewSet):
         }
 
         for row_num, row in enumerate(reader, start=2):
-            first_name = row.get("first_name", "").strip()
-            last_name = row.get("last_name", "").strip()
-            matricule = row.get("matricule", "").strip()
+            first_name = row.get("Prénom", "").strip()
+            last_name = row.get("Nom", "").strip()
+            matricule = row.get("Matricule", "").strip()
             missing = [
                 label
-                for label, value in (("first_name", first_name), ("last_name", last_name), ("matricule", matricule))
+                for label, value in (("Prénom", first_name), ("Nom", last_name), ("Matricule", matricule))
                 if not value
             ]
             if missing:
                 errors.append(f"Ligne {row_num}: {', '.join(missing)} manquant(s)")
                 continue
 
-            email = row.get("email", "").strip().lower() or None
+            email = row.get("Email", "").strip().lower() or None
 
-            site_name = row.get("site", "").strip()
+            site_name = row.get("Site", "").strip()
             site = None
             if site_name:
                 site, _ = Site.objects.get_or_create(name=site_name)
 
-            service_name = row.get("service", "").strip()
+            service_name = row.get("Service", "").strip()
             service = None
             if service_name:
                 service, _ = Service.objects.get_or_create(name=service_name)
 
-            position_name = row.get("position", "").strip()
+            position_name = row.get("Poste", "").strip()
             position = None
             if position_name:
                 position, _ = Position.objects.get_or_create(name=position_name)
 
-            manager_matricule = row.get("manager_matricule", "").strip()
+            manager_matricule = row.get("Matricule N+1", "").strip()
             manager = None
             if manager_matricule:
                 manager = User.objects.filter(matricule=manager_matricule).first()
 
-            role = row.get("role", "employee").strip().lower()
+            role = row.get("Rôle", "employee").strip().lower()
             if role not in ("admin", "rh", "manager", "employee", "stagiaire", "alternant"):
                 role = "employee"
 
-            type_contrat = type_contrat_map.get(row.get("type_contrat", "").strip(), "")
+            type_contrat = type_contrat_map.get(row.get("Type contrat", "").strip(), "")
 
-            date_naissance = self._parse_date(row.get("date_naissance", "").strip())
-            hire_date = self._parse_date(row.get("hire_date", "").strip())
-            date_sortie = self._parse_date(row.get("date_sortie", "").strip())
+            date_naissance = self._parse_date(row.get("Date de naissance", "").strip())
+            hire_date = self._parse_date(row.get("Date d'embauche", "").strip())
+            date_sortie = self._parse_date(row.get("Date de sortie", "").strip())
             statut = "sortie" if date_sortie else "actif"
 
             try:
@@ -409,16 +409,16 @@ class UserViewSet(viewsets.ModelViewSet):
                         "manager": manager,
                         "type_contrat": type_contrat,
                         "statut": statut,
-                        "sexe": row.get("sexe", "").strip(),
+                        "sexe": row.get("Sexe", "").strip(),
                         "date_naissance": date_naissance,
-                        "telephone": row.get("telephone", "").strip(),
+                        "telephone": row.get("Téléphone", "").strip(),
                         "hire_date": hire_date,
                         "date_sortie": date_sortie,
-                        "coefficient": row.get("coefficient", "").strip(),
-                        "salaire_brut": row.get("salaire_brut", "").strip() or None,
-                        "forfait_jour": row.get("forfait_jour", "false").strip().lower() == "true",
-                        "tickets_restaurant": row.get("tickets_restaurant", "false").strip().lower() == "true",
-                        "agence_interim": row.get("agence_interim", "").strip(),
+                        "coefficient": row.get("Coefficient", "").strip(),
+                        "salaire_brut": row.get("Salaire brut mensuel", "").strip() or None,
+                        "forfait_jour": row.get("Forfait jour", "false").strip().lower() == "true",
+                        "tickets_restaurant": row.get("Tickets restaurant", "false").strip().lower() == "true",
+                        "agence_interim": row.get("Agence d'intérim", "").strip(),
                     },
                 )
                 if created_flag:
