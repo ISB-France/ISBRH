@@ -32,6 +32,7 @@ urlpatterns = [
     path("api/interview-templates/", InterviewTemplateViewSet.as_view({"get": "list", "post": "create"}), name="interviewtemplate-list"),
     path("api/interview-templates/import_csv/", InterviewTemplateViewSet.as_view({"post": "import_csv"}), name="interviewtemplate-import-csv"),
     path("api/interview-templates/<int:pk>/", InterviewTemplateViewSet.as_view({"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}), name="interviewtemplate-detail"),
+    path("api/interview-templates/<int:pk>/import_historique_grid/", InterviewTemplateViewSet.as_view({"get": "import_historique_grid"}), name="interviewtemplate-import-historique-grid"),
     path("api/notifications/", NotificationViewSet.as_view({"get": "list"}), name="notification-list"),
     path("api/notifications/<int:pk>/mark-read/", NotificationViewSet.as_view({"post": "mark_read"}), name="notification-mark-read"),
     path("api/notifications/mark-all-read/", NotificationViewSet.as_view({"post": "mark_all_read"}), name="notification-mark-all-read"),

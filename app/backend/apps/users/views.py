@@ -766,7 +766,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 email = row.get("personne email", "").strip().lower() or None
 
                 # Site — on prend le dernier segment après " > "
-                site_full = row.get("Site (nom complet)", "").strip()
+                site_full = row.get("Intitulé département", "").strip()
                 site_name = site_full.split(" > ")[-1] if site_full else ""
                 site = None
                 if site_name:
@@ -777,7 +777,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 if position_name:
                     position, _ = Position.objects.get_or_create(name=position_name)
 
-                service_name = row.get("Service", "").strip()
+                service_name = row.get("Intitulé service", "").strip()
                 service = None
                 if service_name:
                     service, _ = Service.objects.get_or_create(name=service_name)
