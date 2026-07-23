@@ -72,7 +72,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   };
 
   const initials = user
-    ? `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() || user.email[0].toUpperCase()
+    ? `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() || user.email?.[0]?.toUpperCase() || "?"
     : "?";
 
   return (

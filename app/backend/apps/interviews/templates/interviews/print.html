@@ -95,7 +95,6 @@
         <tr><td class="label">Date naissance</td><td class="value">{{ interview.employee.date_naissance|date:"d/m/Y"|default:"—" }}</td></tr>
         <tr><td class="label">Date embauche</td><td class="value">{{ interview.employee.hire_date|date:"d/m/Y"|default:"—" }}</td></tr>
         <tr><td class="label">Type contrat</td><td class="value">{{ interview.employee.get_type_contrat_display|default:"—" }}</td></tr>
-        <tr><td class="label">Catégorie</td><td class="value">{{ interview.employee.get_categorie_socio_pro_display|default:"—" }}</td></tr>
         <tr><td class="label">Poste / Fonction</td><td class="value">{{ interview.employee.position.name|default:"—" }}</td></tr>
         <tr><td class="label">Site</td><td class="value">{{ interview.employee.site.name|default:"—" }}</td></tr>
         <tr><td class="label">Coefficient</td><td class="value">{{ interview.employee.coefficient|default:"—" }}</td></tr>

@@ -340,11 +340,28 @@ class UserViewSet(viewsets.ModelViewSet):
         created = 0
         errors = []
 
+        type_contrat_map = {
+            "cdi": "cdi", "CDI": "cdi",
+            "cdd": "cdd", "CDD": "cdd",
+            "interim": "interim", "intérim": "interim", "Intérim": "interim", "INTERIM": "interim",
+            "alternance": "alternance", "Alternance": "alternance",
+            "stage": "stage", "Stage": "stage",
+        }
+
         for row_num, row in enumerate(reader, start=2):
-            email = row.get("email", "").strip().lower()
-            if not email:
-                errors.append(f"Ligne {row_num}: email manquant")
+            first_name = row.get("first_name", "").strip()
+            last_name = row.get("last_name", "").strip()
+            matricule = row.get("matricule", "").strip()
+            missing = [
+                label
+                for label, value in (("first_name", first_name), ("last_name", last_name), ("matricule", matricule))
+                if not value
+            ]
+            if missing:
+                errors.append(f"Ligne {row_num}: {', '.join(missing)} manquant(s)")
                 continue
+
+            email = row.get("email", "").strip().lower() or None
 
             site_name = row.get("site", "").strip()
             site = None
@@ -361,37 +378,46 @@ class UserViewSet(viewsets.ModelViewSet):
             if position_name:
                 position, _ = Position.objects.get_or_create(name=position_name)
 
-            manager_email = row.get("manager_email", "").strip().lower()
+            manager_matricule = row.get("manager_matricule", "").strip()
             manager = None
-            if manager_email:
-                manager = User.objects.filter(email=manager_email).first()
+            if manager_matricule:
+                manager = User.objects.filter(matricule=manager_matricule).first()
 
             role = row.get("role", "employee").strip().lower()
             if role not in ("admin", "rh", "manager", "employee", "stagiaire", "alternant"):
                 role = "employee"
 
+            type_contrat = type_contrat_map.get(row.get("type_contrat", "").strip(), "")
+
+            date_naissance = self._parse_date(row.get("date_naissance", "").strip())
+            hire_date = self._parse_date(row.get("hire_date", "").strip())
+            date_sortie = self._parse_date(row.get("date_sortie", "").strip())
+            statut = "sortie" if date_sortie else "actif"
+
             try:
                 user, created_flag = User.objects.get_or_create(
-                    email=email,
+                    matricule=matricule,
                     defaults={
-                        "username": email,
-                        "first_name": row.get("first_name", "").strip(),
-                        "last_name": row.get("last_name", "").strip(),
+                        "username": email or f"user_{matricule}",
+                        "email": email,
+                        "first_name": first_name,
+                        "last_name": last_name,
                         "role": role,
                         "service": service,
                         "position": position,
                         "site": site,
                         "manager": manager,
-                        "matricule": row.get("matricule", "").strip(),
-                        "type_contrat": row.get("type_contrat", "").strip(),
-                        "statut": row.get("statut", "actif").strip(),
+                        "type_contrat": type_contrat,
+                        "statut": statut,
                         "sexe": row.get("sexe", "").strip(),
+                        "date_naissance": date_naissance,
                         "telephone": row.get("telephone", "").strip(),
+                        "hire_date": hire_date,
+                        "date_sortie": date_sortie,
                         "coefficient": row.get("coefficient", "").strip(),
                         "salaire_brut": row.get("salaire_brut", "").strip() or None,
                         "forfait_jour": row.get("forfait_jour", "false").strip().lower() == "true",
                         "tickets_restaurant": row.get("tickets_restaurant", "false").strip().lower() == "true",
-                        "cadre": row.get("cadre", "false").strip().lower() == "true",
                         "agence_interim": row.get("agence_interim", "").strip(),
                     },
                 )
@@ -400,7 +426,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     user.save()
                     created += 1
             except Exception as e:
-                errors.append(f"Ligne {row_num} ({email}): {e}")
+                errors.append(f"Ligne {row_num} ({matricule}): {e}")
 
         return Response({"created": created, "errors": errors, "total": len(reader)})
 
@@ -641,7 +667,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     matricule=matricule,
                     defaults={
                         "username": f"collab_{matricule}",
-                        "email": f"{matricule}@collaborateur.isb.fr",
+                        "email": None,
                         "first_name": first_name,
                         "last_name": last_name,
                         "role": "employee",
@@ -656,10 +682,8 @@ class UserViewSet(viewsets.ModelViewSet):
                 )
                 if created_flag:
                     logger.warning(
-                        "Aucun utilisateur trouvé pour le matricule %s, "
-                        "création avec email temporaire (%s)",
+                        "Aucun utilisateur trouvé pour le matricule %s, création sans email",
                         matricule,
-                        user.email,
                     )
                     user.set_unusable_password()
                     user.save()
@@ -739,7 +763,7 @@ class UserViewSet(viewsets.ModelViewSet):
         for row_num, row, matricule in rows:
             try:
                 first_name, last_name = parse_name(row)
-                email = row.get("personne email", "").strip().lower() or f"{matricule}@kostango.isb.fr"
+                email = row.get("personne email", "").strip().lower() or None
 
                 # Site — on prend le dernier segment après " > "
                 site_full = row.get("Site (nom complet)", "").strip()
@@ -795,7 +819,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 user, created_flag = User.objects.get_or_create(
                     matricule=matricule,
                     defaults={
-                        "username": email,
+                        "username": email or f"kostango_{matricule}",
                         "email": email,
                         "first_name": first_name,
                         "last_name": last_name,
