@@ -35,7 +35,6 @@ export default function UserForm() {
   const [salaireBrut, setSalaireBrut] = useState("");
   const [forfaitJour, setForfaitJour] = useState(false);
   const [ticketsRestaurant, setTicketsRestaurant] = useState(false);
-  const [cadre, setCadre] = useState(false);
 
   // Organisation
   const [role, setRole] = useState("employee");
@@ -112,7 +111,6 @@ export default function UserForm() {
       setSalaireBrut(d.salaire_brut ?? "");
       setForfaitJour(d.forfait_jour ?? false);
       setTicketsRestaurant(d.tickets_restaurant ?? false);
-      setCadre(d.cadre ?? false);
 
       setRole(d.role);
       setService(d.service ?? "");
@@ -186,7 +184,6 @@ export default function UserForm() {
       salaire_brut: salaireBrut || null,
       forfait_jour: forfaitJour,
       tickets_restaurant: ticketsRestaurant,
-      cadre,
       role,
       service: service || null,
       position: position || null,
@@ -455,10 +452,6 @@ export default function UserForm() {
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={ticketsRestaurant} onChange={(e) => setTicketsRestaurant(e.target.checked)} className="h-4 w-4" />
                 Tickets restaurant
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={cadre} onChange={(e) => setCadre(e.target.checked)} className="h-4 w-4" />
-                Cadre
               </label>
             </div>
           </CardContent>
