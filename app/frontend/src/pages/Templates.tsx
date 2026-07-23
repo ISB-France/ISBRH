@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Copy, Trash2, Upload } from "lucide-react";
+import { Plus, Copy, Trash2, Upload, Download, FileUp } from "lucide-react";
 import { useRef } from "react";
 import { Toast, useToast } from "../components/Toast";
 import { Card, CardContent } from "../components/ui/card";
@@ -29,6 +29,8 @@ export default function Templates() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const { toast, show, setToast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const historiqueFileRef = useRef<HTMLInputElement>(null);
+  const [historiqueTemplateId, setHistoriqueTemplateId] = useState<number | null>(null);
 
   const { data: templates, isLoading, error, refetch } = useQuery<InterviewTemplate[]>({
     queryKey: ["interview-templates"],
@@ -64,6 +66,29 @@ export default function Templates() {
     show(msg, res.data.errors?.length ? "error" : "success");
     queryClient.invalidateQueries({ queryKey: ["interview-templates"] });
     e.target.value = "";
+  };
+
+  const handleDownloadGrid = async (t: InterviewTemplate) => {
+    const res = await api.get(`/interview-templates/${t.id}/import_historique_grid/`, { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `import_historique_${t.name}.xlsx`.replace(/\s+/g, "_");
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportHistorique = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || historiqueTemplateId === null) return;
+    const form = new FormData();
+    form.append("file", file);
+    form.append("template", String(historiqueTemplateId));
+    const res = await api.post("/interviews/import_historique/", form);
+    const msg = `${res.data.created} entretien(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
+    show(msg, res.data.errors?.length ? "error" : "success");
+    e.target.value = "";
+    setHistoriqueTemplateId(null);
   };
 
   if (isLoading) return <LoadingScreen />;
@@ -134,6 +159,17 @@ export default function Templates() {
                   </td>
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => handleDownloadGrid(t)} title="Télécharger la grille d'import historique">
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setHistoriqueTemplateId(t.id); historiqueFileRef.current?.click(); }}
+                        title="Importer des entretiens historiques"
+                      >
+                        <FileUp className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDuplicate(t)} title="Dupliquer">
                         <Copy className="h-4 w-4" />
                       </Button>
@@ -152,6 +188,8 @@ export default function Templates() {
           </div>
         </CardContent>
       </Card>
+
+      <input ref={historiqueFileRef} type="file" accept=".csv" onChange={handleImportHistorique} hidden />
 
       <ConfirmDialog
         open={deleteId !== null}
