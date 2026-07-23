@@ -892,9 +892,12 @@ class UserViewSet(viewsets.ModelViewSet):
                 manager_matricule = row.get("Matricule N+1", "").strip()
                 if not manager_matricule:
                     continue
-                if manager_matricule in user_map:
-                    user.manager = user_map[manager_matricule]
+                manager = user_map.get(manager_matricule) or User.objects.filter(matricule=manager_matricule).first()
+                if manager:
+                    user.manager = manager
                     user.save(update_fields=["manager"])
+                else:
+                    errors.append(f"Ligne {row_num} ({matricule}): manager matricule {manager_matricule} introuvable")
             except Exception as e:
                 errors.append(f"Ligne {row_num} ({matricule}) - manager: {e}")
 
