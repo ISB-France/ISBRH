@@ -66,17 +66,15 @@ class UserSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        # L'email est optionnel : sur creation (ou si explicitement vide sur
-        # une modification), on genere un email temporaire a partir du
-        # matricule plutot que de laisser le champ vide (unique=True).
-        is_create = self.instance is None
-        if not attrs.get("email") and (is_create or "email" in attrs):
-            matricule = attrs.get("matricule") or getattr(self.instance, "matricule", "")
-            attrs["email"] = f"{matricule}@sansemail.isb.fr"
+        # L'email est optionnel : si non renseigné, on laisse le champ vide
+        # (email nullable) plutôt que de générer une valeur factice.
+        if "email" in attrs and not attrs.get("email"):
+            attrs["email"] = None
         return attrs
 
     def create(self, validated_data):
-        validated_data["username"] = validated_data["email"]
+        matricule = validated_data.get("matricule", "")
+        validated_data["username"] = validated_data.get("email") or f"user_{matricule}"
         return super().create(validated_data)
 
 

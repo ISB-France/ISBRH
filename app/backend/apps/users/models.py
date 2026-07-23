@@ -149,6 +149,10 @@ class User(AbstractUser):
                 "Le rôle admin ne peut être attribué qu'à un superutilisateur "
                 "(bootstrap ADMIN_EMAIL/ADMIN_PASSWORD ou /admin/ Django)."
             )
+        if self.role == self.Role.RH and self.manager_id:
+            raise ValidationError("Un utilisateur avec le rôle RH ne peut pas avoir de manager (N+1).")
+        if self.manager_id and self.manager.role == self.Role.RH:
+            raise ValidationError("Un utilisateur avec le rôle RH ne peut pas être désigné comme manager (N+1).")
         if not self.matricule:
             last = User.objects.filter(matricule__regex=r"^\d{8}$").order_by("matricule").last()
             if last:
@@ -159,7 +163,7 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.get_full_name() or self.email
+        return self.get_full_name() or self.email or self.matricule
 
 
 RH_ROLES = ["admin", "rh"]

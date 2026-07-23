@@ -191,7 +191,7 @@ export default function UserForm() {
       service: service || null,
       position: position || null,
       site: site || null,
-      manager: manager || null,
+      manager: role === "rh" ? null : manager || null,
       agence_interim: agenceInterim,
     };
 
@@ -512,6 +512,7 @@ export default function UserForm() {
                 ))}
               </select>
             </div>
+            {role !== "rh" && (
             <div className="relative" ref={managerFieldRef}>
               <label className="mb-1.5 block text-sm font-medium">N+1</label>
               <div className="relative">
@@ -574,6 +575,7 @@ export default function UserForm() {
                 </div>
               )}
             </div>
+            )}
             {typeContrat === "interim" && (
               <div>
                 <label className="mb-1.5 block text-sm font-medium">Agence d'intérim</label>
