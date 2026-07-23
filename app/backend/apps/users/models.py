@@ -77,12 +77,7 @@ class User(AbstractUser):
         INACTIF = "inactif", "Inactif"
         SORTIE = "sortie", "Sortie"
 
-    class CategorieSocioPro(models.TextChoices):
-        OUVRIER = "ouvrier", "Ouvrier"
-        AGENT_MAITRISE = "agent_maitrise", "Agent de maîtrise"
-        CADRE = "cadre", "Cadre"
-
-    email = models.EmailField(unique=True, blank=True)
+    email = models.EmailField(unique=True, blank=True, null=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.EMPLOYEE, db_index=True)
 
     # Identité
@@ -108,14 +103,6 @@ class User(AbstractUser):
     forfait_jour = models.BooleanField(default=False)
     tickets_restaurant = models.BooleanField(default=False)
     cadre = models.BooleanField(default=False)
-    # Categorie socio-professionnelle (ouvrier/agent de maitrise/cadre) :
-    # distincte de `statut` (actif/inactif/sortie, utilise pour les filtres
-    # RH) et de `cadre` (booleen paie existant). Vierge par defaut, a
-    # renseigner manuellement — affichee sur les entretiens a la place de
-    # `statut`, qui n'a pas de sens dans ce contexte.
-    categorie_socio_pro = models.CharField(
-        max_length=20, choices=CategorieSocioPro.choices, blank=True, db_index=True
-    )
 
     # Organisation
     service = models.ForeignKey(
@@ -162,6 +149,10 @@ class User(AbstractUser):
                 "Le rôle admin ne peut être attribué qu'à un superutilisateur "
                 "(bootstrap ADMIN_EMAIL/ADMIN_PASSWORD ou /admin/ Django)."
             )
+        if self.role == self.Role.RH and self.manager_id:
+            raise ValidationError("Un utilisateur avec le rôle RH ne peut pas avoir de manager (N+1).")
+        if self.manager_id and self.manager.role in (self.Role.RH, self.Role.ADMIN):
+            raise ValidationError("Un utilisateur avec le rôle RH ou Admin ne peut pas être désigné comme manager (N+1).")
         if not self.matricule:
             last = User.objects.filter(matricule__regex=r"^\d{8}$").order_by("matricule").last()
             if last:
@@ -172,7 +163,7 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.get_full_name() or self.email
+        return self.get_full_name() or self.email or self.matricule
 
 
 RH_ROLES = ["admin", "rh"]

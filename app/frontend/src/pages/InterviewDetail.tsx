@@ -20,6 +20,22 @@ const toApiDate = (val: string) => {
   return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : val;
 };
 
+const formatAnciennete = (hireDate: string) => {
+  const start = new Date(hireDate);
+  const now = new Date();
+  let years = now.getFullYear() - start.getFullYear();
+  let months = now.getMonth() - start.getMonth();
+  if (now.getDate() < start.getDate()) months -= 1;
+  if (months < 0) {
+    months += 12;
+    years -= 1;
+  }
+  const parts: string[] = [];
+  if (years > 0) parts.push(`${years} an${years > 1 ? "s" : ""}`);
+  if (months > 0 || parts.length === 0) parts.push(`${months} mois`);
+  return parts.join(" ");
+};
+
 const statusLabel: Record<string, string> = {
   draft: "Brouillon",
   in_progress: "En cours",
@@ -198,12 +214,6 @@ export default function InterviewDetail() {
             {" · "}
             Date limite : {formatDate(interview.due_date)}
           </p>
-          <div className="mt-2 flex items-center gap-2">
-            <label className="text-sm text-muted-foreground">Date de réalisation :</label>
-            <div className="w-40">
-              <DateInput value={dateRealisation} onChange={setDateRealisation} disabled={isReadOnly} />
-            </div>
-          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {!isReadOnly && (
@@ -256,8 +266,10 @@ export default function InterviewDetail() {
         <CardContent>
           <div className="mb-4 grid grid-cols-1 gap-3 border-b border-border pb-4 sm:grid-cols-2">
             <div>
-              <span className="text-xs font-semibold uppercase text-muted-foreground">Date d'entretien</span>
-              <p className="text-sm font-medium">{formatDate(new Date())}</p>
+              <span className="text-xs font-semibold uppercase text-muted-foreground">Date de réalisation</span>
+              <div className="mt-1 w-40">
+                <DateInput value={dateRealisation} onChange={setDateRealisation} disabled={isReadOnly} />
+              </div>
             </div>
             <div>
               <span className="text-xs font-semibold uppercase text-muted-foreground">Nature de l'entretien</span>
@@ -267,7 +279,7 @@ export default function InterviewDetail() {
             </div>
             <div>
               <span className="text-xs font-semibold uppercase text-muted-foreground">Lieu</span>
-              <p className="text-sm font-medium">{interview.employee_detail?.site_name || "—"}</p>
+              <p className="text-sm font-medium">{interview.manager_detail?.site_name || "—"}</p>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -302,7 +314,7 @@ export default function InterviewDetail() {
                   <tr><td className="py-1 text-muted-foreground">Poste</td><td className="py-1 pl-4">{interview.employee_detail?.position_name || "-"}</td></tr>
                   <tr><td className="py-1 text-muted-foreground">Site</td><td className="py-1 pl-4">{interview.employee_detail?.site_name || "-"}</td></tr>
                   <tr><td className="py-1 text-muted-foreground">Coefficient</td><td className="py-1 pl-4">{interview.employee_detail?.coefficient || "-"}</td></tr>
-                  <tr><td className="py-1 text-muted-foreground">Ancienneté</td><td className="py-1 pl-4">{interview.employee_detail?.hire_date ? `${Math.floor((Date.now() - new Date(interview.employee_detail.hire_date).getTime()) / (365.25 * 24 * 60 * 60 * 1000))} ans` : "-"}</td></tr>
+                  <tr><td className="py-1 text-muted-foreground">Ancienneté</td><td className="py-1 pl-4">{interview.employee_detail?.hire_date ? formatAnciennete(interview.employee_detail.hire_date) : "-"}</td></tr>
                 </tbody>
               </table>
             </div>

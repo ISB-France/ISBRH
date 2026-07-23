@@ -296,7 +296,7 @@ export default function Users() {
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="bg-primary-foreground text-primary text-xs font-semibold">
-                            {(u.first_name?.[0] ?? "") + (u.last_name?.[0] ?? "") || u.email[0].toUpperCase()}
+                            {(u.first_name?.[0] ?? "") + (u.last_name?.[0] ?? "") || u.email?.[0]?.toUpperCase() || "?"}
                           </AvatarFallback>
                         </Avatar>
                         <div>
@@ -331,7 +331,7 @@ export default function Users() {
                             {visible.map((sub) => (
                               <Avatar key={sub.id} className="h-7 w-7 border-2 border-white">
                                 <AvatarFallback className="bg-isb-yellow/70 text-isb-brown text-[10px] font-semibold">
-                                  {(sub.first_name?.[0] ?? "") + (sub.last_name?.[0] ?? "") || sub.email[0].toUpperCase()}
+                                  {(sub.first_name?.[0] ?? "") + (sub.last_name?.[0] ?? "") || sub.email?.[0]?.toUpperCase() || "?"}
                                 </AvatarFallback>
                               </Avatar>
                             ))}
