@@ -883,37 +883,27 @@ class UserViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 errors.append(f"Ligne {row_num} ({matricule}): {e}")
 
-        # Construire un mapping nom → matricule pour chercher les managers par nom
-        name_to_matricule = {}
-        for u_matricule, u in user_map.items():
-            full = f"{u.first_name} {u.last_name}".strip().lower()
-            if full:
-                name_to_matricule[full] = u_matricule
-
-        # Deuxième passage : assigner les managers via valideur N+1
+        # Deuxième passage : assigner les managers via le matricule N+1
         for row_num, row, matricule in rows:
             try:
                 user = user_map.get(matricule)
                 if not user:
                     continue
-                valideur = row.get("valideur N+1", "").strip().lower()
-                if not valideur:
+                manager_matricule = row.get("Matricule N+1", "").strip()
+                if not manager_matricule:
                     continue
-                manager_matricule = name_to_matricule.get(valideur)
-                if manager_matricule and manager_matricule in user_map:
+                if manager_matricule in user_map:
                     user.manager = user_map[manager_matricule]
                     user.save(update_fields=["manager"])
             except Exception as e:
                 errors.append(f"Ligne {row_num} ({matricule}) - manager: {e}")
 
-        # Troisième passage : promouvoir en manager ceux qui sont valideur N+1 de quelqu'un
+        # Troisième passage : promouvoir en manager ceux qui sont le N+1 de quelqu'un
         manager_matricules = set()
         for row_num, row, matricule in rows:
-            valideur = row.get("valideur N+1", "").strip().lower()
-            if valideur:
-                mgr_matricule = name_to_matricule.get(valideur)
-                if mgr_matricule and mgr_matricule in user_map:
-                    manager_matricules.add(mgr_matricule)
+            mgr_matricule = row.get("Matricule N+1", "").strip()
+            if mgr_matricule and mgr_matricule in user_map:
+                manager_matricules.add(mgr_matricule)
         for mgr_matricule in manager_matricules:
             mgr = user_map.get(mgr_matricule)
             if mgr and mgr.role == "employee":
