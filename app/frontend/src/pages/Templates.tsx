@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Copy, Trash2, Upload, Download, FileUp } from "lucide-react";
-import { useRef } from "react";
+import { Plus, Copy, Trash2 } from "lucide-react";
 import { Toast, useToast } from "../components/Toast";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -27,10 +26,7 @@ export default function Templates() {
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const { toast, show, setToast } = useToast();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const historiqueFileRef = useRef<HTMLInputElement>(null);
-  const [historiqueTemplateId, setHistoriqueTemplateId] = useState<number | null>(null);
+  const { toast, setToast } = useToast();
 
   const { data: templates, isLoading, error, refetch } = useQuery<InterviewTemplate[]>({
     queryKey: ["interview-templates"],
@@ -56,41 +52,6 @@ export default function Templates() {
     queryClient.invalidateQueries({ queryKey: ["interview-templates"] });
   };
 
-  const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const form = new FormData();
-    form.append("file", file);
-    const res = await api.post("/interview-templates/import_csv/", form);
-    const msg = `${res.data.created} modèle(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
-    show(msg, res.data.errors?.length ? "error" : "success");
-    queryClient.invalidateQueries({ queryKey: ["interview-templates"] });
-    e.target.value = "";
-  };
-
-  const handleDownloadGrid = async (t: InterviewTemplate) => {
-    const res = await api.get(`/interview-templates/${t.id}/import_historique_grid/`, { responseType: "blob" });
-    const url = URL.createObjectURL(res.data);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `import_historique_${t.name}.xlsx`.replace(/\s+/g, "_");
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImportHistorique = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || historiqueTemplateId === null) return;
-    const form = new FormData();
-    form.append("file", file);
-    form.append("template", String(historiqueTemplateId));
-    const res = await api.post("/interviews/import_historique/", form);
-    const msg = `${res.data.created} entretien(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
-    show(msg, res.data.errors?.length ? "error" : "success");
-    e.target.value = "";
-    setHistoriqueTemplateId(null);
-  };
-
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les modèles" onRetry={refetch} />;
 
@@ -99,11 +60,6 @@ export default function Templates() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Modèles d'entretien</h1>
         <div className="flex gap-2">
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
-            <Upload className="h-4 w-4" />
-            Importer CSV
-            <input ref={fileRef} type="file" accept=".csv" onChange={handleImportCsv} hidden />
-          </label>
           <Button onClick={() => navigate("/templates/new")} className="gap-2">
             <Plus className="h-4 w-4" />
             Nouveau modèle
@@ -159,17 +115,6 @@ export default function Templates() {
                   </td>
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => handleDownloadGrid(t)} title="Télécharger la grille d'import historique">
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setHistoriqueTemplateId(t.id); historiqueFileRef.current?.click(); }}
-                        title="Importer des entretiens historiques"
-                      >
-                        <FileUp className="h-4 w-4" />
-                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDuplicate(t)} title="Dupliquer">
                         <Copy className="h-4 w-4" />
                       </Button>
@@ -188,8 +133,6 @@ export default function Templates() {
           </div>
         </CardContent>
       </Card>
-
-      <input ref={historiqueFileRef} type="file" accept=".csv" onChange={handleImportHistorique} hidden />
 
       <ConfirmDialog
         open={deleteId !== null}

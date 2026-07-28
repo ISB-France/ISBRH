@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Download, Trash2, Upload, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Download, Trash2, Upload, FileUp, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -12,9 +12,18 @@ import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import ErrorScreen from "../components/ErrorScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { Toast, useToast } from "../components/Toast";
 import api from "../api";
 import type { Interview, User } from "../types";
 import { formatDate } from "../lib/utils";
+
+const interviewTypeLabel: Record<string, string> = {
+  annual: "Évaluation",
+  professional: "Professionnel",
+  bilan: "Bilan",
+  forfait: "Forfait jours",
+  fin_carriere: "Fin de carrière",
+};
 
 const filenameFromContentDisposition = (contentDisposition: string | undefined, fallback: string) => {
   const match = contentDisposition?.match(/filename="?([^"]+)"?/);
@@ -70,6 +79,9 @@ export default function Interviews() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [historiqueType, setHistoriqueType] = useState("annual");
+  const historiqueFileRef = useRef<HTMLInputElement>(null);
+  const { toast, show, setToast } = useToast();
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -87,6 +99,19 @@ export default function Interviews() {
     const form = new FormData();
     form.append("document", file);
     await api.post(`/interviews/${id}/upload_document/`, form);
+    queryClient.invalidateQueries({ queryKey: ["interviews"] });
+    e.target.value = "";
+  };
+
+  const handleImportHistorique = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    form.append("type", historiqueType);
+    const res = await api.post("/interviews/import_historique/", form);
+    const msg = `${res.data.created} entretien(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
+    show(msg, res.data.errors?.length ? "error" : "success");
     queryClient.invalidateQueries({ queryKey: ["interviews"] });
     e.target.value = "";
   };
@@ -149,10 +174,26 @@ export default function Interviews() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Entretiens</h1>
         {(currentUser?.role === "admin" || currentUser?.role === "rh") && (
-          <Button onClick={() => navigate("/interviews/new")} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nouvel entretien
-          </Button>
+          <div className="flex gap-2">
+            <select
+              value={historiqueType}
+              onChange={(e) => setHistoriqueType(e.target.value)}
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            >
+              {Object.entries(interviewTypeLabel).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
+              <FileUp className="h-4 w-4" />
+              Importer historique
+              <input ref={historiqueFileRef} type="file" accept=".csv" onChange={handleImportHistorique} hidden />
+            </label>
+            <Button onClick={() => navigate("/interviews/new")} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nouvel entretien
+            </Button>
+          </div>
         )}
       </div>
 
@@ -437,6 +478,7 @@ export default function Interviews() {
         onConfirm={async () => { if (deleteId) { await api.delete(`/interviews/${deleteId}/`); queryClient.invalidateQueries({ queryKey: ["interviews"] }); } setDeleteId(null); }}
         onCancel={() => setDeleteId(null)}
       />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AppLayout>
   );
 }
