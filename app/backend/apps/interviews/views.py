@@ -17,68 +17,6 @@ from apps.users.validators import validate_csv_upload
 
 FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@", "\t", "\r")
 
-HISTORIQUE_TABLE_ROWS = 8
-
-
-def _historique_columns(sections):
-    """Construit la liste des colonnes (clé, en-tête, explication) attendues
-    dans la grille d'import d'un modèle d'entretien, une par question (ou
-    plusieurs pour les tableaux/objectifs)."""
-    columns = []
-    for section in sections:
-        for q in section.get("questions", []):
-            qid = q.get("id", "")
-            label = q.get("label", qid)
-            qtype = q.get("type", "textarea")
-            if qtype == "objectif_bilan":
-                columns.append((f"{qid}__statut", f"{qid} — Statut", "atteint / partiel / non_atteint"))
-                columns.append((f"{qid}__commentaire", f"{qid} — Commentaire", "texte libre"))
-            elif qtype == "table":
-                for col in q.get("columns", []):
-                    for n in range(1, HISTORIQUE_TABLE_ROWS + 1):
-                        columns.append((
-                            f"{qid}__{col.get('id')}__L{n}",
-                            f"{qid} — {col.get('label')} (ligne {n})",
-                            "texte libre" if col.get("type") == "textarea" else "note de 1 à 5",
-                        ))
-            elif qtype == "rating":
-                columns.append((qid, f"{qid} — {label}", "note de 1 à 5"))
-            elif qtype == "yesno":
-                columns.append((qid, f"{qid} — {label}", "Oui / Non"))
-            else:
-                columns.append((qid, f"{qid} — {label}", "texte libre"))
-    return columns
-
-
-def _fill_answer_from_row(section, row):
-    """Remplit récursivement les réponses d'un jeu de sections à partir des
-    colonnes de la ligne CSV/xlsx (voir _historique_columns pour la
-    convention de nommage des colonnes)."""
-    for q in section.get("questions", []):
-        qid = q.get("id", "")
-        qtype = q.get("type", "textarea")
-        if qtype == "objectif_bilan":
-            q["answer"] = {
-                "statut": row.get(f"{qid}__statut", "").strip(),
-                "commentaire": row.get(f"{qid}__commentaire", "").strip(),
-            }
-        elif qtype == "table":
-            cols = q.get("columns", [])
-            rows = []
-            for n in range(1, HISTORIQUE_TABLE_ROWS + 1):
-                line = [row.get(f"{qid}__{col.get('id')}__L{n}", "").strip() for col in cols]
-                if any(line):
-                    rows.append(line)
-            q["answer"] = rows
-        elif qtype == "rating":
-            val = row.get(qid, "").strip()
-            q["answer"] = int(val) if val.isdigit() else None
-        elif qtype == "yesno":
-            val = row.get(qid, "").strip().lower()
-            q["answer"] = val in ("oui", "true", "1")
-        else:
-            q["answer"] = row.get(qid, "").strip()
-
 
 def sanitize_cell_value(value):
     """Neutralise l'injection de formule Excel : une cellule dont la valeur
@@ -317,16 +255,16 @@ class InterviewViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"])
     def import_historique(self, request):
-        """Importe des entretiens historiques complets (sections/questions/
-        réponses) à partir de la grille générée par
-        InterviewTemplateViewSet.import_historique_grid."""
+        """Importe en masse des entretiens historiques (métadonnées
+        uniquement, sans contenu détaillé) : État, Date prévue,
+        Date de réalisation, Matricule. Le type d'entretien est choisi une
+        fois pour tout le fichier."""
         if request.user.role not in RH_ROLES:
             return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
 
-        template_id = request.data.get("template")
-        template = InterviewTemplate.objects.filter(pk=template_id).first()
-        if not template:
-            return Response({"error": "Modèle d'entretien introuvable"}, status=status.HTTP_400_BAD_REQUEST)
+        interview_type = request.data.get("type", "").strip()
+        if interview_type not in dict(Interview.Type.choices):
+            return Response({"error": "Type d'entretien invalide"}, status=status.HTTP_400_BAD_REQUEST)
 
         file = request.FILES.get("file")
         if not file:
@@ -340,12 +278,15 @@ class InterviewViewSet(viewsets.ModelViewSet):
 
         reader = csv.DictReader(io.StringIO(file.read().decode("utf-8-sig")))
 
-        status_map = {"termine": "completed", "signe": "signed", "": "completed"}
+        status_map = {
+            "cloture": "signed", "clôture": "signed", "cloturé": "signed", "clôturé": "signed",
+            "realise": "completed", "réalisé": "completed", "realisé": "completed", "réalise": "completed",
+        }
 
         created = 0
         errors = []
         for row_num, row in enumerate(reader, start=2):
-            matricule = row.get("matricule", "").strip()
+            matricule = row.get("Matricule", "").strip()
             if not matricule:
                 errors.append(f"Ligne {row_num}: matricule manquant")
                 continue
@@ -355,25 +296,18 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 continue
 
             try:
-                date_realisation = self._parse_date(row.get("date_realisation", "").strip())
-                manager_matricule = row.get("manager_matricule", "").strip()
-                manager = User.objects.filter(matricule=manager_matricule).first() if manager_matricule else None
-                statut = status_map.get(row.get("statut", "").strip().lower(), "completed")
-
-                sections = copy.deepcopy(template.sections)
-                for section in sections:
-                    _fill_answer_from_row(section, row)
+                date_prevue = self._parse_date(row.get("Date prévue", "").strip())
+                date_realisation = self._parse_date(row.get("Date de réalisation", "").strip())
+                statut = status_map.get(row.get("État", "").strip().lower(), "completed")
 
                 iv = Interview.objects.create(
                     employee=employee,
-                    manager=manager,
-                    template=template,
-                    template_snapshot=template.sections,
-                    type=template.type,
+                    manager=employee.manager,
+                    type=interview_type,
                     status=statut,
-                    due_date=date_realisation or timezone.now().date(),
+                    due_date=date_prevue or date_realisation or timezone.now().date(),
                     date_realisation=date_realisation,
-                    content={"sections": sections},
+                    content={},
                 )
                 if date_realisation:
                     Interview.objects.filter(pk=iv.pk).update(created_at=date_realisation)
@@ -632,54 +566,6 @@ class InterviewTemplateViewSet(viewsets.ModelViewSet):
                 errors.append(f"{name}: {str(e)}")
 
         return Response({"created": created, "errors": errors})
-
-    @action(detail=True, methods=["get"])
-    def import_historique_grid(self, request, pk=None):
-        """Génère la grille xlsx à remplir pour importer des entretiens
-        historiques utilisant ce modèle : une colonne par question, plus les
-        colonnes communes (collaborateur, date, statut, manager)."""
-        if request.user.role not in RH_ROLES:
-            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
-        template = self.get_object()
-        columns = _historique_columns(template.sections)
-
-        base = [
-            ("matricule", "Matricule", "Matricule du collaborateur (obligatoire)"),
-            ("date_realisation", "Date de réalisation", "Format JJ/MM/AAAA (obligatoire)"),
-            ("statut", "Statut", "termine / signe (termine par défaut)"),
-            ("manager_matricule", "Matricule N+1", "Matricule du manager ayant mené l'entretien (optionnel)"),
-        ]
-        all_columns = base + columns
-
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Import"
-
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(all_columns))
-        ws.cell(row=1, column=1, value=f"Import entretiens historiques — {template.name}").font = Font(bold=True, size=13)
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=len(all_columns))
-        ws.cell(row=2, column=1, value="Une ligne par entretien. La ligne d'explications (ligne 4) est indicative, à supprimer avant l'import.").font = Font(italic=True, size=9, color="666666")
-
-        header_row = 4
-        expl_row = 5
-        for i, (key, header, expl) in enumerate(all_columns, start=1):
-            hcell = ws.cell(row=header_row, column=i, value=key)
-            hcell.font = Font(bold=True)
-            ecell = ws.cell(row=expl_row, column=i, value=f"{header} — {expl}")
-            ecell.font = Font(italic=True, size=8.5, color="666666")
-            ecell.alignment = Alignment(wrap_text=True, vertical="top")
-            ecell.fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
-            ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = 22
-            if key == "matricule":
-                ws.cell(row=header_row, column=i).number_format = "@"
-        ws.row_dimensions[expl_row].height = 45
-
-        response = HttpResponse(
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-        response["Content-Disposition"] = f'attachment; filename="import_historique_{template.id}.xlsx"'
-        wb.save(response)
-        return response
 
 
 class CampaignViewSet(viewsets.ModelViewSet):
