@@ -175,7 +175,7 @@ class InterviewSerializer(serializers.ModelSerializer):
                 "type_label": iv.get_type_display(),
                 "status": iv.status,
                 "status_label": iv.get_status_display(),
-                "manager_name": iv.manager.get_full_name() or iv.manager.email,
+                "manager_name": (iv.manager.get_full_name() or iv.manager.email) if iv.manager else None,
             }
             for iv in past_interviews
         ]
