@@ -116,6 +116,9 @@ class InterviewPermission(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.user.role in RH_ROLES:
             return True
+        basename = getattr(view, 'basename', '')
+        if basename in ('interviewtemplate', 'campaign'):
+            return request.user.role in ("admin", "rh", "manager")
         if view.action in ("retrieve", "print", "pdf"):
             if obj.employee == request.user or obj.manager == request.user:
                 return True
