@@ -395,6 +395,95 @@ class InterviewViewSet(viewsets.ModelViewSet):
 
         return Response({"created": created, "errors": errors})
 
+    @action(detail=False, methods=["post"])
+    def import_objectifs_a_evaluer(self, request):
+        """Ajoute des lignes au tableau "Objectif à évaluer" de l'entretien
+        d'évaluation en cours d'un collaborateur : Matricule, Définition,
+        Thème, Date de réalisation."""
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        import csv
+        import io
+
+        reader = csv.DictReader(io.StringIO(file.read().decode("utf-8-sig")))
+
+        def get_any(row, *keys):
+            for key in keys:
+                value = row.get(key)
+                if value:
+                    return value.strip()
+            return ""
+
+        created = 0
+        errors = []
+        for row_num, row in enumerate(reader, start=2):
+            matricule = get_any(row, "Matricule")
+            if not matricule:
+                errors.append(f"Ligne {row_num}: matricule manquant")
+                continue
+
+            employee = User.objects.filter(matricule=matricule).first()
+            if not employee:
+                errors.append(f"Ligne {row_num}: aucun collaborateur avec le matricule {matricule}")
+                continue
+
+            interview = (
+                Interview.objects.filter(employee=employee, type="annual")
+                .exclude(status__in=("completed", "signed", "cancelled"))
+                .order_by("-due_date")
+                .first()
+            )
+            if not interview:
+                errors.append(f"Ligne {row_num} ({matricule}): aucun entretien d'évaluation en cours pour ce collaborateur")
+                continue
+
+            question = None
+            for section in (interview.content or {}).get("sections", []):
+                for q in section.get("questions", []):
+                    if q.get("id") == OBJECTIF_A_EVALUER_ID:
+                        question = q
+                        break
+                if question:
+                    break
+            if question is None:
+                errors.append(
+                    f"Ligne {row_num} ({matricule}): tableau 'Objectif à évaluer' introuvable sur l'entretien"
+                )
+                continue
+
+            try:
+                theme = get_any(row, "Thème", "Theme")
+                objectif = get_any(row, "Définition", "Definition")
+                date_str = get_any(row, "Date de réalisation", "Date de realisation")
+                date_realisation = date_str
+                if date_str:
+                    try:
+                        date_realisation = str(self._parse_date(date_str))
+                    except ValueError:
+                        pass
+
+                new_row = [theme, objectif, date_realisation, "", None, "", None, ""]
+                answer = question.get("answer")
+                if not isinstance(answer, list):
+                    answer = []
+                answer.append(new_row)
+                question["answer"] = answer
+
+                interview.save(update_fields=["content"])
+                created += 1
+            except Exception as e:
+                errors.append(f"Ligne {row_num} ({matricule}): {e}")
+
+        return Response({"created": created, "errors": errors})
+
     @staticmethod
     def _parse_date(value):
         if not value:

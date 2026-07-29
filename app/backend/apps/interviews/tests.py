@@ -3,6 +3,7 @@ import csv
 import datetime
 import io
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from openpyxl import load_workbook
 from rest_framework.test import APIClient
@@ -386,6 +387,107 @@ class ObjectifTablesTests(TestCase):
         interview = Interview.objects.get(campaign=campaign, employee=self.employee)
         evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
         self.assertEqual(evaluer["answer"], previous_rows)
+
+
+class ImportObjectifsAEvaluerTests(TestCase):
+    """L'import CSV Matricule/Définition/Thème/Date de réalisation ajoute
+    des lignes au tableau "Objectif à évaluer" de l'entretien d'évaluation
+    en cours du collaborateur."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager, matricule="00000800",
+        )
+        self.template = InterviewTemplate.objects.create(
+            name="Annuel", type="annual", sections=copy.deepcopy(ANNUAL_TEMPLATE["sections"]),
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def _upload(self, csv_content):
+        upload = SimpleUploadedFile(
+            "objectifs.csv", csv_content.encode("utf-8-sig"), content_type="text/csv"
+        )
+        return self.client.post(
+            "/api/interviews/import_objectifs_a_evaluer/", {"file": upload}, format="multipart"
+        )
+
+    def test_import_appends_row_to_objectif_a_evaluer_table(self):
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="draft", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+
+        interview.refresh_from_db()
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(len(evaluer["answer"]), 1)
+        theme, objectif, date_realisation = evaluer["answer"][0][:3]
+        self.assertEqual(theme, "Qualité")
+        self.assertEqual(objectif, "Réduire les défauts")
+        self.assertEqual(date_realisation, "2026-12-31")
+
+    def test_import_accepts_unaccented_headers(self):
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="in_progress", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Definition,Theme,Date de realisation\n"
+            "00000800,Suivre une formation,Compétences,15/06/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+
+    def test_import_reports_error_when_no_current_interview(self):
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 0)
+        self.assertTrue(any("aucun entretien" in e.lower() for e in response.data["errors"]))
+
+    def test_import_reports_error_for_unknown_matricule(self):
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00099999,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 0)
+        self.assertTrue(any("aucun collaborateur" in e.lower() for e in response.data["errors"]))
+
+    def test_import_completed_interview_is_not_targeted(self):
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 0)
 
 
 class PrintTemplateTests(TestCase):
