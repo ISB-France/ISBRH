@@ -148,6 +148,59 @@ class DevLoginViewTests(TestCase):
         self.assertEqual(responses[-1].status_code, 429)
 
 
+class LoginViewTests(TestCase):
+    """LoginView doit fonctionner independamment de DEBUG (contrairement a
+    DevLoginView) et limiter le nombre de tentatives."""
+
+    def setUp(self):
+        from django.core.cache import cache as default_cache
+
+        default_cache.clear()
+        self.user = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234", role="employee"
+        )
+        self.client = APIClient()
+
+    def test_login_works_when_debug_true(self):
+        with override_settings(DEBUG=True):
+            response = self.client.post(
+                "/api/auth/login/",
+                {"email": "emp1@example.com", "password": "pass1234"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertIn("user", response.data)
+
+    def test_login_works_when_debug_false(self):
+        with override_settings(DEBUG=False):
+            response = self.client.post(
+                "/api/auth/login/",
+                {"email": "emp1@example.com", "password": "pass1234"},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+
+    def test_login_invalid_credentials(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"email": "emp1@example.com", "password": "wrong-password"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn("access", response.data)
+
+    def test_login_is_rate_limited(self):
+        payload = {"email": "emp1@example.com", "password": "wrong-password"}
+        responses = [
+            self.client.post("/api/auth/login/", payload, format="json")
+            for _ in range(6)
+        ]
+        self.assertEqual(responses[-1].status_code, 429)
+
+
 class AdminRoleProtectionTests(TestCase):
     """Le role "admin" ne doit jamais pouvoir etre attribue via l'API, le
     formulaire, ou une modification directe en base qui contournerait le
