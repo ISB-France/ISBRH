@@ -193,7 +193,7 @@
     {% for question in section.questions %}
     <div class="q-item">
       <div class="q-label">{{ question.label }}</div>
-      {% if question.type == "textarea" %}
+      {% if question.type == "textarea" or question.type == "dropdown" %}
       <div class="q-answer">{{ question.answer|default:"—" }}</div>
       {% elif question.type == "objectif_bilan" %}
       <div class="q-answer">

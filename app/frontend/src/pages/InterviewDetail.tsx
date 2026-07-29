@@ -12,7 +12,7 @@ import { Toast, useToast } from "../components/Toast";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { DateInput } from "../components/ui/date-input";
 import api from "../api";
-import type { Interview, User, Section, ObjectifBilanAnswer } from "../types";
+import type { Interview, User, Section, ObjectifBilanAnswer, AnswerList } from "../types";
 import { formatDate } from "../lib/utils";
 
 const toApiDate = (val: string) => {
@@ -59,6 +59,12 @@ export default function InterviewDetail() {
     queryKey: ["me"],
     queryFn: () => api.get("/auth/me/").then((r) => r.data),
   });
+
+  const { data: answerLists } = useQuery<AnswerList[]>({
+    queryKey: ["answer-lists"],
+    queryFn: () => api.get("/answer-lists/").then((r) => r.data),
+  });
+  const listItems = (name?: string) => answerLists?.find((l) => l.name === name)?.items || [];
 
   useEffect(() => {
     if (!id) return;
@@ -580,6 +586,26 @@ export default function InterviewDetail() {
                     />
                   </div>
                 )}
+                {q.type === "dropdown" && (
+                  <>
+                  <select
+                    value={typeof q.answer === "string" ? q.answer : ""}
+                    onChange={(e) => updateAnswer(sIdx, qIdx, e.target.value)}
+                    disabled={isReadOnly}
+                    className="h-10 w-full rounded-md border border-border bg-white px-3 text-sm"
+                  >
+                    <option value="">Sélectionner...</option>
+                    {listItems(q.list_name).map((item) => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                  {prev !== undefined && prev !== null && (
+                    <p className="mt-1 text-xs text-muted-foreground/60 italic">
+                      Réponse précédente : {String(prev)}
+                    </p>
+                  )}
+                  </>
+                )}
                 {q.type === "table" && q.columns && q.columns.length > 0 && (
                   <>
                   <div className="overflow-x-auto rounded-md border border-border">
@@ -620,6 +646,20 @@ export default function InterviewDetail() {
                                         Préc. : {String(prevCell)}
                                       </p>
                                     )}
+                                    </div>
+                                  ) : col.type === "liste" ? (
+                                    <div>
+                                    <select
+                                      value={typeof row[colIdx] === "string" ? (row[colIdx] as string) : ""}
+                                      onChange={(e) => updateTableCell(sIdx, qIdx, rowIdx, colIdx, e.target.value)}
+                                      disabled={isReadOnly}
+                                      className="h-8 min-w-[160px] rounded-md border border-border bg-white px-2 text-xs"
+                                    >
+                                      <option value="">Sélectionner...</option>
+                                      {listItems(col.list_name).map((item) => (
+                                        <option key={item} value={item}>{item}</option>
+                                      ))}
+                                    </select>
                                     </div>
                                   ) : (
                                     <div>

@@ -86,7 +86,8 @@ export interface Section {
 export interface TableColumn {
   id: string;
   label: string;
-  type: "textarea" | "rating";
+  type: "textarea" | "rating" | "liste";
+  list_name?: string;
 }
 
 export interface ObjectifBilanAnswer {
@@ -97,10 +98,17 @@ export interface ObjectifBilanAnswer {
 export interface Question {
   id: string;
   label: string;
-  type: "textarea" | "rating" | "table" | "yesno" | "objectif_bilan";
+  type: "textarea" | "rating" | "table" | "yesno" | "objectif_bilan" | "dropdown";
   answer?: string | number | boolean | null | (string | number | null)[][] | ObjectifBilanAnswer;
   columns?: TableColumn[];
   objectif_texte?: string;
+  list_name?: string;
+}
+
+export interface AnswerList {
+  id: number;
+  name: string;
+  items: string[];
 }
 
 export interface Interview {

@@ -11,8 +11,8 @@ from rest_framework import viewsets, permissions, filters, status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Campaign, Interview, InterviewTemplate
-from .serializers import CampaignSerializer, InterviewSerializer, InterviewTemplateSerializer
+from .models import AnswerList, Campaign, Interview, InterviewTemplate
+from .serializers import AnswerListSerializer, CampaignSerializer, InterviewSerializer, InterviewTemplateSerializer
 from apps.users.models import RH_ROLES, User
 from apps.users.validators import validate_csv_upload
 
@@ -594,6 +594,68 @@ class InterviewTemplateViewSet(viewsets.ModelViewSet):
                 errors.append(f"{name}: {str(e)}")
 
         return Response({"created": created, "errors": errors})
+
+
+class AnswerListViewSet(viewsets.ModelViewSet):
+    queryset = AnswerList.objects.all()
+    serializer_class = AnswerListSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if request.method not in permissions.SAFE_METHODS and request.user.role not in RH_ROLES:
+            self.permission_denied(request, message="Accès réservé aux RH/Admin")
+
+    @action(detail=False, methods=["post"])
+    def import_csv(self, request):
+        """Importe des listes de choix depuis un CSV : une colonne par liste,
+        l'en-tête de colonne est le nom de la liste, chaque ligne un élément."""
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        import csv
+        import io
+
+        reader = csv.reader(io.StringIO(file.read().decode("utf-8-sig")))
+        rows = list(reader)
+        if not rows:
+            return Response({"error": "Fichier vide"}, status=status.HTTP_400_BAD_REQUEST)
+
+        headers = [h.strip() for h in rows[0]]
+        created = 0
+        updated = 0
+        errors = []
+        for col_idx, name in enumerate(headers):
+            if not name:
+                continue
+            try:
+                items = []
+                seen = set()
+                for row in rows[1:]:
+                    if col_idx >= len(row):
+                        continue
+                    value = row[col_idx].strip()
+                    if value and value not in seen:
+                        seen.add(value)
+                        items.append(value)
+                obj, was_created = AnswerList.objects.update_or_create(
+                    name=name, defaults={"items": items}
+                )
+                if was_created:
+                    created += 1
+                else:
+                    updated += 1
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+
+        return Response({"created": created, "updated": updated, "errors": errors})
 
 
 class CampaignViewSet(viewsets.ModelViewSet):
