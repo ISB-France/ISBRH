@@ -118,6 +118,10 @@ class User(AbstractUser):
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="subordinates"
     )
     agence_interim = models.CharField(max_length=100, blank=True)
+    en_exploitation = models.BooleanField(
+        default=False,
+        help_text="Si oui, le collaborateur a des entretiens d'évaluation et professionnel tous les 2 ans.",
+    )
 
     # Ancien champ obsolète, conservé temporairement
     onboarding_status = models.CharField(

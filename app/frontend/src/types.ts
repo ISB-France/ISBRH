@@ -50,6 +50,7 @@ export interface User {
   manager: number | null;
   manager_name: string | null;
   agence_interim: string;
+  en_exploitation: boolean;
   icon: string;
   preferences: string;
 }

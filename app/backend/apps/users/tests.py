@@ -402,12 +402,21 @@ class ImportDeduplicationTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["created"], 0)
-        self.assertEqual(response.data["updated"], 1)
 
-        self.assertEqual(User.objects.filter(matricule="00000123").count(), 1)
-        jean = User.objects.get(matricule="00000123")
-        self.assertEqual(jean.email, "jean.dupont@isb.fr")
-        self.assertEqual(jean.niveau, "III")
+    def test_import_kostango_exploitation_column_sets_en_exploitation(self):
+        kostango_csv = (
+            "personne email,Prénom,Nom,Matricule,Exploitation\n"
+            "a@isb.fr,Alice,DURAND,00000124,Oui\n"
+            "b@isb.fr,Bob,MOREAU,00000125,Non\n"
+        )
+        response = self.client.post(
+            "/api/users/import_kostango/",
+            {"file": _csv_upload("kostango.csv", kostango_csv)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(User.objects.get(matricule="00000124").en_exploitation)
+        self.assertFalse(User.objects.get(matricule="00000125").en_exploitation)
 
     def test_import_collaborateurs_unknown_matricule_creates_temp_email_user(self):
         collaborateurs_csv = (

@@ -45,7 +45,7 @@ class UserSerializer(serializers.ModelSerializer):
             "service", "service_name",
             "position", "position_name",
             "site", "site_name",
-            "manager", "manager_name", "agence_interim",
+            "manager", "manager_name", "agence_interim", "en_exploitation",
             "icon",
             "preferences",
         ]
@@ -113,7 +113,7 @@ class UserMeSerializer(serializers.ModelSerializer):
             "service", "service_name",
             "position", "position_name",
             "site", "site_name",
-            "manager", "manager_name", "agence_interim",
+            "manager", "manager_name", "agence_interim", "en_exploitation",
             "icon",
             "preferences",
         ]
