@@ -1,3 +1,4 @@
+import csv
 import datetime
 import io
 
@@ -509,6 +510,59 @@ class ExcelExportFormulaInjectionTests(TestCase):
         cell_value = ws.cell(row=2, column=answer_col).value
         self.assertTrue(cell_value.startswith("'="))
         self.assertIn("cmd", cell_value)
+
+
+class CampaignExportMatriculeTests(TestCase):
+    """Les exports de campagne doivent inclure le matricule du collaborateur
+    et celui de son manager."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234",
+            role="manager", matricule="00000700",
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager, matricule="00000701",
+        )
+        self.campaign = Campaign.objects.create(
+            name="Campagne matricules",
+            start_date=datetime.date(2026, 1, 1),
+            due_date=datetime.date(2026, 12, 31),
+        )
+        self.interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, campaign=self.campaign,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_export_contents_xlsx_includes_matricules(self):
+        response = self.client.get(f"/api/campaigns/{self.campaign.id}/export_contents_xlsx/")
+        self.assertEqual(response.status_code, 200)
+        wb = load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        headers = [c.value for c in ws[1]]
+        self.assertIn("Matricule", headers)
+        self.assertIn("Matricule manager", headers)
+        matricule_col = headers.index("Matricule") + 1
+        manager_matricule_col = headers.index("Matricule manager") + 1
+        self.assertEqual(ws.cell(row=2, column=matricule_col).value, "00000701")
+        self.assertEqual(ws.cell(row=2, column=manager_matricule_col).value, "00000700")
+
+    def test_export_csv_includes_matricules(self):
+        response = self.client.get(
+            "/api/interviews/export_csv/", {"campaign_id": self.campaign.id}
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8-sig")
+        rows = list(csv.reader(io.StringIO(content)))
+        header = rows[0]
+        self.assertIn("Matricule", header)
+        self.assertIn("Matricule manager", header)
 
 
 class InterviewTemplateSectionsValidationTests(TestCase):

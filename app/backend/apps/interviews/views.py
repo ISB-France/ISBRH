@@ -382,14 +382,16 @@ class InterviewViewSet(viewsets.ModelViewSet):
         response = HttpResponse(content_type="text/csv; charset=utf-8-sig")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         writer = csv.writer(response)
-        writer.writerow(["ID", "Employé", "Email", "Manager", "Type", "Statut", "Date limite", "Date création", "Poste", "Service", "Site"])
+        writer.writerow(["ID", "Employé", "Matricule", "Email", "Manager", "Matricule manager", "Type", "Statut", "Date limite", "Date création", "Poste", "Service", "Site"])
         for iv in qs.select_related("employee", "manager", "employee__position", "employee__service", "employee__site"):
             snap = iv.content.get("employee_snapshot", {})
             writer.writerow([
                 iv.id,
                 iv.employee.get_full_name() or iv.employee.email,
+                iv.employee.matricule,
                 iv.employee.email,
                 (iv.manager.get_full_name() or iv.manager.email) if iv.manager else "",
+                iv.manager.matricule if iv.manager else "",
                 iv.get_type_display(),
                 iv.get_status_display(),
                 iv.due_date,
@@ -770,7 +772,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
         qs = Interview.objects.filter(
             status__in=("completed", "signed"),
             created_at__gte=six_years_ago,
-        ).select_related("employee", "employee__site")
+        ).select_related("employee", "employee__site", "employee__manager")
 
         if campaign_ids:
             qs = qs.filter(campaign_id__in=[int(c) for c in campaign_ids])
@@ -795,7 +797,8 @@ class CampaignViewSet(viewsets.ModelViewSet):
         non_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
         headers = [
-            "Type d'entretien", "ID Collaborateur", "Nom et Prénom", "Site",
+            "Type d'entretien", "ID Collaborateur", "Matricule", "Nom et Prénom", "Site",
+            "Matricule manager",
             "Tous les entretiens (6 ans)",
             "Au moins une formation",
             "Au moins une évolution salaire",
@@ -840,11 +843,13 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
                 ws.cell(row=row_idx, column=1, value=type_label).border = thin_border
                 ws.cell(row=row_idx, column=2, value=emp.id).border = thin_border
-                ws.cell(row=row_idx, column=3, value=emp.get_full_name() or emp.email).border = thin_border
-                ws.cell(row=row_idx, column=4, value=emp.site.name if emp.site else "").border = thin_border
-                ws.cell(row=row_idx, column=5, value="").border = thin_border
+                ws.cell(row=row_idx, column=3, value=emp.matricule).border = thin_border
+                ws.cell(row=row_idx, column=4, value=emp.get_full_name() or emp.email).border = thin_border
+                ws.cell(row=row_idx, column=5, value=emp.site.name if emp.site else "").border = thin_border
+                ws.cell(row=row_idx, column=6, value=emp.manager.matricule if emp.manager else "").border = thin_border
+                ws.cell(row=row_idx, column=7, value="").border = thin_border
 
-                for col_idx, key in [(6, "has_formation"), (7, "has_salary"), (8, "has_evolution")]:
+                for col_idx, key in [(8, "has_formation"), (9, "has_salary"), (10, "has_evolution")]:
                     val = "Oui" if flags[key] else "Non"
                     cell = ws.cell(row=row_idx, column=col_idx, value=val)
                     cell.border = thin_border
@@ -852,7 +857,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                     cell.fill = oui_fill if flags[key] else non_fill
 
                 for y in years:
-                    col_idx = 9 + years.index(y)
+                    col_idx = 11 + years.index(y)
                     val = "Oui" if years_interviewed[y] else ""
                     cell = ws.cell(row=row_idx, column=col_idx, value=val)
                     cell.border = thin_border
@@ -906,7 +911,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             left=Side(style="thin"), right=Side(style="thin"),
             top=Side(style="thin"), bottom=Side(style="thin"),
         )
-        base_headers = ["ID", "Nom", "Prénom", "Email", "Site", "Service", "Poste", "Manager", "Statut entretien", "Date limite"]
+        base_headers = ["ID", "Matricule", "Nom", "Prénom", "Email", "Site", "Service", "Poste", "Manager", "Matricule manager", "Statut entretien", "Date limite"]
 
         first_sheet = True
         for iv_type, type_interviews in interviews_by_type.items():
@@ -940,11 +945,12 @@ class CampaignViewSet(viewsets.ModelViewSet):
             for row_idx, iv in enumerate(type_interviews, 2):
                 emp = iv.employee
                 row_data = [
-                    emp.id, emp.last_name, emp.first_name, emp.email,
+                    emp.id, emp.matricule, emp.last_name, emp.first_name, emp.email,
                     emp.site.name if emp.site else "",
                     emp.service.name if emp.service else "",
                     emp.position.name if emp.position else "",
                     (iv.manager.get_full_name() or iv.manager.email) if iv.manager else "",
+                    iv.manager.matricule if iv.manager else "",
                     iv.get_status_display(),
                     str(iv.due_date),
                 ]
