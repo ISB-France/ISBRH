@@ -9,6 +9,7 @@ import { Badge } from "../components/ui/badge";
 import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import ErrorScreen from "../components/ErrorScreen";
+import { Toast, useToast } from "../components/Toast";
 import api from "../api";
 import type { Campaign, Interview } from "../types";
 import { formatDate } from "../lib/utils";
@@ -30,6 +31,7 @@ export default function CampaignDetail() {
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const { toast, show, setToast } = useToast();
 
   const { data: campaign, isLoading, error } = useQuery<Campaign>({
     queryKey: ["campaign", id],
@@ -38,19 +40,21 @@ export default function CampaignDetail() {
 
   const { data: interviews } = useQuery<Interview[]>({
     queryKey: ["interviews", "campaign", id],
-    queryFn: () => api.get("/interviews/").then((r) =>
-      r.data.filter((iv: Interview) => iv.campaign === Number(id)),
-    ),
+    queryFn: () => api.get("/interviews/", { params: { campaign: id, page_size: 200 } }).then((r) => r.data.results),
   });
 
   const handleGenerate = async () => {
     setGenerating(true);
     try {
-      await api.post(`/campaigns/${id}/generate/`);
+      const res = await api.post(`/campaigns/${id}/generate/`);
       queryClient.invalidateQueries({ queryKey: ["campaign", id] });
       queryClient.invalidateQueries({ queryKey: ["interviews", "campaign", id] });
+      show(`${res.data.created} entretien(s) généré(s) sur ${res.data.total}`, "success");
     } catch (err) {
       console.error(err);
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        || "Erreur lors de la génération des entretiens";
+      show(message, "error");
     }
     setGenerating(false);
   };
@@ -260,6 +264,7 @@ export default function CampaignDetail() {
         }}
         onCancel={() => setShowBulkDeleteConfirm(false)}
       />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AppLayout>
   );
 }

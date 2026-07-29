@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Download, Trash2, Upload, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Download, Trash2, Upload, FileUp, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -12,9 +12,18 @@ import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
 import ErrorScreen from "../components/ErrorScreen";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { Toast, useToast } from "../components/Toast";
 import api from "../api";
 import type { Interview, User } from "../types";
 import { formatDate } from "../lib/utils";
+
+const interviewTypeLabel: Record<string, string> = {
+  annual: "Évaluation",
+  professional: "Professionnel",
+  bilan: "Bilan",
+  forfait: "Forfait jours",
+  fin_carriere: "Fin de carrière",
+};
 
 const filenameFromContentDisposition = (contentDisposition: string | undefined, fallback: string) => {
   const match = contentDisposition?.match(/filename="?([^"]+)"?/);
@@ -47,6 +56,11 @@ const toIsoDate = (d: Date) => {
   return `${y}-${m}-${day}`;
 };
 
+const todayRange = (): DateRange => {
+  const today = new Date();
+  return { from: today, to: today };
+};
+
 const statusLabel: Record<string, string> = {
   draft: "Brouillon",
   in_progress: "En cours",
@@ -55,14 +69,21 @@ const statusLabel: Record<string, string> = {
   cancelled: "Annulé",
 };
 
+interface InterviewPage {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: Interview[];
+}
+
 export default function Interviews() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [type, setType] = useState("");
   const [scope, setScope] = useState("");
   const [showHistory, setShowHistory] = useState(false);
-  const [year, setYear] = useState("");
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange());
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -70,6 +91,9 @@ export default function Interviews() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [historiqueType, setHistoriqueType] = useState("annual");
+  const historiqueFileRef = useRef<HTMLInputElement>(null);
+  const { toast, show, setToast } = useToast();
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -91,6 +115,19 @@ export default function Interviews() {
     e.target.value = "";
   };
 
+  const handleImportHistorique = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    form.append("type", historiqueType);
+    const res = await api.post("/interviews/import_historique/", form);
+    const msg = `${res.data.created} entretien(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
+    show(msg, res.data.errors?.length ? "error" : "success");
+    queryClient.invalidateQueries({ queryKey: ["interviews"] });
+    e.target.value = "";
+  };
+
   const { data: currentUser } = useQuery<User>({
     queryKey: ["me"],
     queryFn: () => api.get("/auth/me/").then((r) => r.data),
@@ -98,37 +135,50 @@ export default function Interviews() {
 
   const statusParam = showHistory ? "completed,signed" : "draft,in_progress";
 
-  const { data: interviews, isLoading, error, refetch } = useQuery<Interview[]>({
-    queryKey: ["interviews", type, scope, showHistory],
-    queryFn: () =>
+  const dateFrom = showHistory ? (year ? `${year}-01-01` : undefined) : dateRange?.from ? toIsoDate(dateRange.from) : undefined;
+  const dateTo = showHistory ? (year ? `${year}-12-31` : undefined) : dateRange?.to ? toIsoDate(dateRange.to) : undefined;
+
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<InterviewPage>({
+    queryKey: ["interviews", type, scope, showHistory, dateFrom, dateTo],
+    queryFn: ({ pageParam }) =>
       api.get("/interviews/", {
-        params: { type, status: statusParam, scope: scope || undefined, ordering: showHistory ? "-updated_at" : undefined },
+        params: {
+          type,
+          status: statusParam,
+          scope: scope || undefined,
+          ordering: showHistory ? "-updated_at" : undefined,
+          due_date_after: dateFrom,
+          due_date_before: dateTo,
+          page: pageParam,
+        },
       }).then((r) => r.data),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => (lastPage.next ? allPages.length + 1 : undefined),
   });
 
-  const availableYears = useMemo(() => {
-    if (!interviews) return [];
-    const years = new Set(interviews.map((iv) => iv.due_date.slice(0, 4)));
-    return Array.from(years).sort((a, b) => b.localeCompare(a));
-  }, [interviews]);
+  const interviews = useMemo(() => data?.pages.flatMap((p) => p.results) ?? [], [data]);
+  const total = data?.pages[0]?.count ?? 0;
+
+  const { data: availableYears } = useQuery<number[]>({
+    queryKey: ["interviews-years", type, scope],
+    queryFn: () =>
+      api.get("/interviews/available_years/", {
+        params: { type, status: "completed,signed", scope: scope || undefined },
+      }).then((r) => r.data),
+    enabled: showHistory,
+  });
 
   const displayed = useMemo(() => {
-    if (!interviews) return interviews;
-    let filtered = interviews;
-    if (showHistory && year) {
-      filtered = filtered.filter((iv) => iv.due_date.slice(0, 4) === year);
-    }
-    if (!showHistory && (dateRange?.from || dateRange?.to)) {
-      const from = dateRange.from ? toIsoDate(dateRange.from) : undefined;
-      const to = dateRange.to ? toIsoDate(dateRange.to) : undefined;
-      filtered = filtered.filter((iv) => {
-        if (from && iv.due_date < from) return false;
-        if (to && iv.due_date > to) return false;
-        return true;
-      });
-    }
-    if (!sortField) return filtered;
-    return [...filtered].sort((a, b) => {
+    if (!sortField) return interviews;
+    return [...interviews].sort((a, b) => {
       let cmp = 0;
       if (sortField === "employee") {
         const aName = `${a.employee_detail?.first_name ?? ""} ${a.employee_detail?.last_name ?? ""}`.trim();
@@ -139,7 +189,7 @@ export default function Interviews() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [interviews, sortField, sortDir, showHistory, year, dateRange]);
+  }, [interviews, sortField, sortDir]);
 
   if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les entretiens" onRetry={refetch} />;
@@ -149,10 +199,26 @@ export default function Interviews() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-2xl font-bold">Entretiens</h1>
         {(currentUser?.role === "admin" || currentUser?.role === "rh") && (
-          <Button onClick={() => navigate("/interviews/new")} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nouvel entretien
-          </Button>
+          <div className="flex gap-2">
+            <select
+              value={historiqueType}
+              onChange={(e) => setHistoriqueType(e.target.value)}
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+            >
+              {Object.entries(interviewTypeLabel).map(([k, v]) => (
+                <option key={k} value={k}>{v}</option>
+              ))}
+            </select>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
+              <FileUp className="h-4 w-4" />
+              Importer historique
+              <input ref={historiqueFileRef} type="file" accept=".csv" onChange={handleImportHistorique} hidden />
+            </label>
+            <Button onClick={() => navigate("/interviews/new")} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nouvel entretien
+            </Button>
+          </div>
         )}
       </div>
 
@@ -201,7 +267,7 @@ export default function Interviews() {
             className="h-10 rounded-md border border-border bg-white px-3 text-sm"
           >
             <option value="">Toutes les années</option>
-            {availableYears.map((y) => (
+            {availableYears?.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
@@ -264,9 +330,8 @@ export default function Interviews() {
                   {(currentUser?.role === "admin" || currentUser?.role === "rh") && (
                     <input
                       type="checkbox"
-                      checked={interviews !== undefined && interviews.length > 0 && selectedIds.length === interviews.length}
+                      checked={interviews.length > 0 && selectedIds.length === interviews.length}
                       onChange={() => {
-                        if (!interviews) return;
                         setSelectedIds(selectedIds.length === interviews.length ? [] : interviews.map((iv) => iv.id));
                       }}
                       className="h-4 w-4"
@@ -301,14 +366,14 @@ export default function Interviews() {
               </tr>
             </thead>
             <tbody>
-              {interviews?.length === 0 && (
+              {interviews.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-6 py-8 text-center text-sm text-muted-foreground">
                     {showHistory ? "Aucun entretien terminé" : "Aucun entretien en cours"}
                   </td>
                 </tr>
               )}
-              {displayed?.map((iv) => (
+              {displayed.map((iv) => (
                 <tr
                   key={iv.id}
                   className="border-b border-border last:border-0 transition-colors"
@@ -410,6 +475,19 @@ export default function Interviews() {
             </tbody>
           </table>
           </div>
+          {interviews.length > 0 && (
+            <div className="flex items-center justify-between border-t border-border px-6 py-3">
+              <span className="text-xs text-muted-foreground">
+                {interviews.length} sur {total} entretien{total > 1 ? "s" : ""}
+              </span>
+              {hasNextPage && (
+                <Button variant="outline" size="sm" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="gap-2">
+                  <ChevronDown className="h-4 w-4" />
+                  {isFetchingNextPage ? "Chargement..." : "Charger plus"}
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -437,6 +515,7 @@ export default function Interviews() {
         onConfirm={async () => { if (deleteId) { await api.delete(`/interviews/${deleteId}/`); queryClient.invalidateQueries({ queryKey: ["interviews"] }); } setDeleteId(null); }}
         onCancel={() => setDeleteId(null)}
       />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AppLayout>
   );
 }
