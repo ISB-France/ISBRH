@@ -8,6 +8,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from rest_framework import viewsets, permissions, filters, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import Campaign, Interview, InterviewTemplate
@@ -141,6 +142,12 @@ class InterviewPermission(permissions.BasePermission):
         return False
 
 
+class InterviewPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
 class InterviewViewSet(viewsets.ModelViewSet):
     serializer_class = InterviewSerializer
     permission_classes = [permissions.IsAuthenticated, InterviewPermission]
@@ -148,6 +155,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
     search_fields = ["employee__first_name", "employee__last_name", "employee__email"]
     ordering_fields = ["due_date", "created_at", "updated_at", "status"]
     ordering = ["-due_date"]
+    pagination_class = InterviewPagination
 
     def get_object(self):
         from django.shortcuts import get_object_or_404
@@ -189,6 +197,8 @@ class InterviewViewSet(viewsets.ModelViewSet):
         type_filter = self.request.query_params.get("type")
         status_filter = self.request.query_params.get("status")
         campaign_filter = self.request.query_params.get("campaign")
+        due_date_after = self.request.query_params.get("due_date_after")
+        due_date_before = self.request.query_params.get("due_date_before")
         if type_filter:
             qs = qs.filter(type=type_filter)
         if status_filter:
@@ -196,6 +206,10 @@ class InterviewViewSet(viewsets.ModelViewSet):
             qs = qs.filter(status__in=status_list)
         if campaign_filter:
             qs = qs.filter(campaign_id=campaign_filter)
+        if due_date_after:
+            qs = qs.filter(due_date__gte=due_date_after)
+        if due_date_before:
+            qs = qs.filter(due_date__lte=due_date_before)
 
         return qs
 
@@ -251,6 +265,14 @@ class InterviewViewSet(viewsets.ModelViewSet):
             "overdue": qs.filter(status__in=("draft", "in_progress"), due_date__lt=now).count(),
             "upcoming": qs.filter(status__in=("draft", "in_progress"), due_date__gte=now).count(),
         })
+
+    @action(detail=False, methods=["get"])
+    def available_years(self, request):
+        """Années distinctes disponibles pour le filtre historique, sans
+        charger les entretiens complets (juste les dates)."""
+        qs = self.get_queryset()
+        years = sorted({d.year for d in qs.dates("due_date", "year")}, reverse=True)
+        return Response(years)
 
     @action(detail=False, methods=["get"])
     def employees(self, request):

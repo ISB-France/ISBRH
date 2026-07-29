@@ -40,7 +40,7 @@ export default function CampaignDetail() {
 
   const { data: interviews } = useQuery<Interview[]>({
     queryKey: ["interviews", "campaign", id],
-    queryFn: () => api.get("/interviews/", { params: { campaign: id } }).then((r) => r.data),
+    queryFn: () => api.get("/interviews/", { params: { campaign: id, page_size: 200 } }).then((r) => r.data.results),
   });
 
   const handleGenerate = async () => {
