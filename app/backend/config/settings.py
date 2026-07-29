@@ -117,6 +117,7 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_THROTTLE_RATES": {
         "dev_login": "5/min",
+        "login": "5/min",
     },
 }
 
