@@ -93,6 +93,7 @@ export default function Interviews() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [historiqueType, setHistoriqueType] = useState("annual");
   const historiqueFileRef = useRef<HTMLInputElement>(null);
+  const objectifsFileRef = useRef<HTMLInputElement>(null);
   const { toast, show, setToast } = useToast();
 
   const handleSort = (field: string) => {
@@ -123,6 +124,18 @@ export default function Interviews() {
     form.append("type", historiqueType);
     const res = await api.post("/interviews/import_historique/", form);
     const msg = `${res.data.created} entretien(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
+    show(msg, res.data.errors?.length ? "error" : "success");
+    queryClient.invalidateQueries({ queryKey: ["interviews"] });
+    e.target.value = "";
+  };
+
+  const handleImportObjectifsAEvaluer = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    const res = await api.post("/interviews/import_objectifs_a_evaluer/", form);
+    const msg = `${res.data.created} objectif(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
     show(msg, res.data.errors?.length ? "error" : "success");
     queryClient.invalidateQueries({ queryKey: ["interviews"] });
     e.target.value = "";
@@ -203,6 +216,7 @@ export default function Interviews() {
             <select
               value={historiqueType}
               onChange={(e) => setHistoriqueType(e.target.value)}
+              title="Type par défaut si la colonne Type Entretien est vide"
               className="h-10 rounded-md border border-border bg-white px-3 text-sm"
             >
               {Object.entries(interviewTypeLabel).map(([k, v]) => (
@@ -213,6 +227,14 @@ export default function Interviews() {
               <FileUp className="h-4 w-4" />
               Importer historique
               <input ref={historiqueFileRef} type="file" accept=".csv" onChange={handleImportHistorique} hidden />
+            </label>
+            <label
+              className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary"
+              title="Colonnes attendues : Matricule, Définition, Thème, Date de réalisation"
+            >
+              <FileUp className="h-4 w-4" />
+              Importer objectifs à évaluer
+              <input ref={objectifsFileRef} type="file" accept=".csv" onChange={handleImportObjectifsAEvaluer} hidden />
             </label>
             <Button onClick={() => navigate("/interviews/new")} className="gap-2">
               <Plus className="h-4 w-4" />

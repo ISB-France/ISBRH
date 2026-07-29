@@ -66,11 +66,49 @@ def build_previous_year_bilan_sections(employee, interview_type):
                 "answer": {"statut": "", "commentaire": ""},
             }
             for q in source["questions"]
-            if q.get("answer")
+            if q.get("answer") and q.get("type") != "table"
         ]
         if questions:
             bilan_sections.append({"id": new_id, "title": new_title, "questions": questions})
     return bilan_sections
+
+
+OBJECTIF_A_DEFINIR_ID = "objectif_a_definir"
+OBJECTIF_A_EVALUER_ID = "objectif_a_evaluer"
+
+
+def carry_forward_objectifs_table(employee, interview_type, sections):
+    """Pour un entretien annuel, reprend le tableau "Objectif à définir"
+    rempli lors de l'entretien annuel précédent (ex: 2025) pour pré-remplir
+    le tableau "Objectif à évaluer" de l'entretien en cours (ex: 2026)."""
+    if interview_type != "annual":
+        return sections
+
+    previous = (
+        Interview.objects.filter(employee=employee, type="annual", status__in=("completed", "signed"))
+        .order_by("-created_at")
+        .first()
+    )
+    if not previous:
+        return sections
+
+    previous_rows = None
+    for section in previous.content.get("sections", []):
+        for question in section.get("questions", []):
+            if question.get("id") == OBJECTIF_A_DEFINIR_ID:
+                previous_rows = question.get("answer")
+                break
+        if previous_rows:
+            break
+    if not previous_rows:
+        return sections
+
+    sections = copy.deepcopy(list(sections))
+    for section in sections:
+        for question in section.get("questions", []):
+            if question.get("id") == OBJECTIF_A_EVALUER_ID:
+                question["answer"] = copy.deepcopy(previous_rows)
+    return sections
 
 
 DEFAULT_TABLE_ROWS = 5
@@ -236,6 +274,9 @@ class InterviewViewSet(viewsets.ModelViewSet):
             bilan_sections = build_previous_year_bilan_sections(employee, interview_type)
             if bilan_sections:
                 content["sections"] = bilan_sections + list(content.get("sections", []))
+            content["sections"] = carry_forward_objectifs_table(
+                employee, interview_type, content.get("sections", [])
+            )
         content["sections"] = apply_default_sections(content.get("sections", []))
         serializer.validated_data["content"] = content
         serializer.save(manager=employee.manager if employee else None)
@@ -285,14 +326,14 @@ class InterviewViewSet(viewsets.ModelViewSet):
     def import_historique(self, request):
         """Importe en masse des entretiens historiques (métadonnées
         uniquement, sans contenu détaillé) : État, Date prévue,
-        Date de réalisation, Matricule. Le type d'entretien est choisi une
-        fois pour tout le fichier."""
+        Date de réalisation, Type Entretien, Matricule. Le type d'entretien
+        est lu ligne par ligne (colonne "Type Entretien"), avec repli sur le
+        type transmis en paramètre de requête si la colonne est absente ou
+        vide sur une ligne."""
         if request.user.role not in RH_ROLES:
             return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
 
-        interview_type = request.data.get("type", "").strip()
-        if interview_type not in dict(Interview.Type.choices):
-            return Response({"error": "Type d'entretien invalide"}, status=status.HTTP_400_BAD_REQUEST)
+        default_type = request.data.get("type", "").strip()
 
         file = request.FILES.get("file")
         if not file:
@@ -311,6 +352,9 @@ class InterviewViewSet(viewsets.ModelViewSet):
             "realise": "completed", "réalisé": "completed", "realisé": "completed", "réalise": "completed",
         }
 
+        type_map = {key.lower(): key for key, _ in Interview.Type.choices}
+        type_map.update({label.lower(): key for key, label in Interview.Type.choices})
+
         created = 0
         errors = []
         for row_num, row in enumerate(reader, start=2):
@@ -321,6 +365,12 @@ class InterviewViewSet(viewsets.ModelViewSet):
             employee = User.objects.filter(matricule=matricule).first()
             if not employee:
                 errors.append(f"Ligne {row_num}: aucun collaborateur avec le matricule {matricule}")
+                continue
+
+            type_raw = row.get("Type Entretien", "").strip() or default_type
+            interview_type = type_map.get(type_raw.lower())
+            if not interview_type:
+                errors.append(f"Ligne {row_num} ({matricule}): type d'entretien '{type_raw}' invalide")
                 continue
 
             try:
@@ -339,6 +389,95 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 )
                 if date_realisation:
                     Interview.objects.filter(pk=iv.pk).update(created_at=date_realisation)
+                created += 1
+            except Exception as e:
+                errors.append(f"Ligne {row_num} ({matricule}): {e}")
+
+        return Response({"created": created, "errors": errors})
+
+    @action(detail=False, methods=["post"])
+    def import_objectifs_a_evaluer(self, request):
+        """Ajoute des lignes au tableau "Objectif à évaluer" de l'entretien
+        d'évaluation en cours d'un collaborateur : Matricule, Définition,
+        Thème, Date de réalisation."""
+        if request.user.role not in RH_ROLES:
+            return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "Fichier CSV requis"}, status=status.HTTP_400_BAD_REQUEST)
+        upload_error = validate_csv_upload(file)
+        if upload_error:
+            return Response({"error": upload_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        import csv
+        import io
+
+        reader = csv.DictReader(io.StringIO(file.read().decode("utf-8-sig")))
+
+        def get_any(row, *keys):
+            for key in keys:
+                value = row.get(key)
+                if value:
+                    return value.strip()
+            return ""
+
+        created = 0
+        errors = []
+        for row_num, row in enumerate(reader, start=2):
+            matricule = get_any(row, "Matricule")
+            if not matricule:
+                errors.append(f"Ligne {row_num}: matricule manquant")
+                continue
+
+            employee = User.objects.filter(matricule=matricule).first()
+            if not employee:
+                errors.append(f"Ligne {row_num}: aucun collaborateur avec le matricule {matricule}")
+                continue
+
+            interview = (
+                Interview.objects.filter(employee=employee, type="annual")
+                .exclude(status__in=("completed", "signed", "cancelled"))
+                .order_by("-due_date")
+                .first()
+            )
+            if not interview:
+                errors.append(f"Ligne {row_num} ({matricule}): aucun entretien d'évaluation en cours pour ce collaborateur")
+                continue
+
+            question = None
+            for section in (interview.content or {}).get("sections", []):
+                for q in section.get("questions", []):
+                    if q.get("id") == OBJECTIF_A_EVALUER_ID:
+                        question = q
+                        break
+                if question:
+                    break
+            if question is None:
+                errors.append(
+                    f"Ligne {row_num} ({matricule}): tableau 'Objectif à évaluer' introuvable sur l'entretien"
+                )
+                continue
+
+            try:
+                theme = get_any(row, "Thème", "Theme")
+                objectif = get_any(row, "Définition", "Definition")
+                date_str = get_any(row, "Date de réalisation", "Date de realisation")
+                date_realisation = date_str
+                if date_str:
+                    try:
+                        date_realisation = str(self._parse_date(date_str))
+                    except ValueError:
+                        pass
+
+                new_row = [theme, objectif, date_realisation, "", None, "", None, ""]
+                answer = question.get("answer")
+                if not isinstance(answer, list):
+                    answer = []
+                answer.append(new_row)
+                question["answer"] = answer
+
+                interview.save(update_fields=["content"])
                 created += 1
             except Exception as e:
                 errors.append(f"Ligne {row_num} ({matricule}): {e}")
@@ -373,14 +512,16 @@ class InterviewViewSet(viewsets.ModelViewSet):
         response = HttpResponse(content_type="text/csv; charset=utf-8-sig")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         writer = csv.writer(response)
-        writer.writerow(["ID", "Employé", "Email", "Manager", "Type", "Statut", "Date limite", "Date création", "Poste", "Service", "Site"])
+        writer.writerow(["ID", "Employé", "Matricule", "Email", "Manager", "Matricule manager", "Type", "Statut", "Date limite", "Date création", "Poste", "Service", "Site"])
         for iv in qs.select_related("employee", "manager", "employee__position", "employee__service", "employee__site"):
             snap = iv.content.get("employee_snapshot", {})
             writer.writerow([
                 iv.id,
                 iv.employee.get_full_name() or iv.employee.email,
+                iv.employee.matricule,
                 iv.employee.email,
                 (iv.manager.get_full_name() or iv.manager.email) if iv.manager else "",
+                iv.manager.matricule if iv.manager else "",
                 iv.get_type_display(),
                 iv.get_status_display(),
                 iv.due_date,
@@ -713,6 +854,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             bilan_sections = build_previous_year_bilan_sections(user, template.type)
             if bilan_sections:
                 sections = bilan_sections + sections
+            sections = carry_forward_objectifs_table(user, template.type, sections)
             sections = apply_default_sections(sections)
             _, was_created = Interview.objects.get_or_create(
                 campaign=campaign,
@@ -761,7 +903,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
         qs = Interview.objects.filter(
             status__in=("completed", "signed"),
             created_at__gte=six_years_ago,
-        ).select_related("employee", "employee__site")
+        ).select_related("employee", "employee__site", "employee__manager")
 
         if campaign_ids:
             qs = qs.filter(campaign_id__in=[int(c) for c in campaign_ids])
@@ -786,7 +928,8 @@ class CampaignViewSet(viewsets.ModelViewSet):
         non_fill = PatternFill(start_color="FFC7CE", end_color="FFC7CE", fill_type="solid")
 
         headers = [
-            "Type d'entretien", "ID Collaborateur", "Nom et Prénom", "Site",
+            "Type d'entretien", "ID Collaborateur", "Matricule", "Nom et Prénom", "Site",
+            "Matricule manager",
             "Tous les entretiens (6 ans)",
             "Au moins une formation",
             "Au moins une évolution salaire",
@@ -831,11 +974,13 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
                 ws.cell(row=row_idx, column=1, value=type_label).border = thin_border
                 ws.cell(row=row_idx, column=2, value=emp.id).border = thin_border
-                ws.cell(row=row_idx, column=3, value=emp.get_full_name() or emp.email).border = thin_border
-                ws.cell(row=row_idx, column=4, value=emp.site.name if emp.site else "").border = thin_border
-                ws.cell(row=row_idx, column=5, value="").border = thin_border
+                ws.cell(row=row_idx, column=3, value=emp.matricule).border = thin_border
+                ws.cell(row=row_idx, column=4, value=emp.get_full_name() or emp.email).border = thin_border
+                ws.cell(row=row_idx, column=5, value=emp.site.name if emp.site else "").border = thin_border
+                ws.cell(row=row_idx, column=6, value=emp.manager.matricule if emp.manager else "").border = thin_border
+                ws.cell(row=row_idx, column=7, value="").border = thin_border
 
-                for col_idx, key in [(6, "has_formation"), (7, "has_salary"), (8, "has_evolution")]:
+                for col_idx, key in [(8, "has_formation"), (9, "has_salary"), (10, "has_evolution")]:
                     val = "Oui" if flags[key] else "Non"
                     cell = ws.cell(row=row_idx, column=col_idx, value=val)
                     cell.border = thin_border
@@ -843,7 +988,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                     cell.fill = oui_fill if flags[key] else non_fill
 
                 for y in years:
-                    col_idx = 9 + years.index(y)
+                    col_idx = 11 + years.index(y)
                     val = "Oui" if years_interviewed[y] else ""
                     cell = ws.cell(row=row_idx, column=col_idx, value=val)
                     cell.border = thin_border
@@ -897,7 +1042,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             left=Side(style="thin"), right=Side(style="thin"),
             top=Side(style="thin"), bottom=Side(style="thin"),
         )
-        base_headers = ["ID", "Nom", "Prénom", "Email", "Site", "Service", "Poste", "Manager", "Statut entretien", "Date limite"]
+        base_headers = ["ID", "Matricule", "Nom", "Prénom", "Email", "Site", "Service", "Poste", "Manager", "Matricule manager", "Statut entretien", "Date limite"]
 
         first_sheet = True
         for iv_type, type_interviews in interviews_by_type.items():
@@ -931,11 +1076,12 @@ class CampaignViewSet(viewsets.ModelViewSet):
             for row_idx, iv in enumerate(type_interviews, 2):
                 emp = iv.employee
                 row_data = [
-                    emp.id, emp.last_name, emp.first_name, emp.email,
+                    emp.id, emp.matricule, emp.last_name, emp.first_name, emp.email,
                     emp.site.name if emp.site else "",
                     emp.service.name if emp.service else "",
                     emp.position.name if emp.position else "",
                     (iv.manager.get_full_name() or iv.manager.email) if iv.manager else "",
+                    iv.manager.matricule if iv.manager else "",
                     iv.get_status_display(),
                     str(iv.due_date),
                 ]

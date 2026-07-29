@@ -1,3 +1,14 @@
+OBJECTIF_TABLE_COLUMNS = [
+    {"id": "theme", "label": "Thème", "type": "textarea"},
+    {"id": "objectif", "label": "Objectif", "type": "textarea"},
+    {"id": "date_realisation", "label": "Date de réalisation", "type": "textarea"},
+    {"id": "niveau_realisation", "label": "Niveau de réalisation", "type": "textarea"},
+    {"id": "note_collaborateur", "label": "Note collaborateur", "type": "rating"},
+    {"id": "remarque_collaborateur", "label": "Remarque collaborateur", "type": "textarea"},
+    {"id": "note_manager", "label": "Note manager", "type": "rating"},
+    {"id": "remarque_manager", "label": "Remarque manager", "type": "textarea"},
+]
+
 ANNUAL_TEMPLATE = {
     "sections": [
         {
@@ -22,6 +33,20 @@ ANNUAL_TEMPLATE = {
             "id": "objectifs",
             "title": "Nouveaux objectifs pour l'année à venir",
             "questions": [
+                {
+                    "id": "objectif_a_evaluer",
+                    "label": "Objectif à évaluer",
+                    "type": "table",
+                    "columns": OBJECTIF_TABLE_COLUMNS,
+                    "answer": [],
+                },
+                {
+                    "id": "objectif_a_definir",
+                    "label": "Objectif à définir",
+                    "type": "table",
+                    "columns": OBJECTIF_TABLE_COLUMNS,
+                    "answer": [],
+                },
                 {"id": "objectifs_metier", "label": "Objectifs métier", "type": "textarea", "answer": ""},
                 {"id": "objectifs_personnels", "label": "Objectifs de développement personnel", "type": "textarea", "answer": ""},
                 {"id": "indicateurs", "label": "Indicateurs de réussite", "type": "textarea", "answer": ""},

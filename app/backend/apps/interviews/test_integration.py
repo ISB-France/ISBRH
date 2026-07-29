@@ -268,3 +268,136 @@ class NotificationTests(TestCase):
                 user=manager, message__icontains="Échéance dans"
             ).exists()
         )
+
+
+class GenerateExploitationInterviewsTests(TestCase):
+    """Les collaborateurs en exploitation doivent recevoir un entretien
+    d'evaluation et un entretien professionnel tous les 2 ans."""
+
+    def test_employee_in_exploitation_without_history_gets_interviews_from_hire_date(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, en_exploitation=True,
+            hire_date=datetime.date.today() - datetime.timedelta(days=2 * 365),
+        )
+        out = io.StringIO()
+        call_command("generate_exploitation_interviews", stdout=out)
+        self.assertEqual(
+            Interview.objects.filter(employee=employee, type="annual").count(), 1
+        )
+        self.assertEqual(
+            Interview.objects.filter(employee=employee, type="professional").count(), 1
+        )
+
+    def test_employee_not_in_exploitation_gets_no_interview(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, en_exploitation=False,
+            hire_date=datetime.date.today() - datetime.timedelta(days=2 * 365),
+        )
+        out = io.StringIO()
+        call_command("generate_exploitation_interviews", stdout=out)
+        self.assertEqual(Interview.objects.count(), 0)
+
+    def test_employee_with_recent_hire_date_gets_no_interview_yet(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, en_exploitation=True,
+            hire_date=datetime.date.today() - datetime.timedelta(days=30),
+        )
+        out = io.StringIO()
+        call_command("generate_exploitation_interviews", stdout=out)
+        self.assertEqual(Interview.objects.filter(employee=employee).count(), 0)
+
+    def test_command_is_idempotent_when_interview_already_pending(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, en_exploitation=True,
+            hire_date=datetime.date.today() - datetime.timedelta(days=2 * 365),
+        )
+        out = io.StringIO()
+        call_command("generate_exploitation_interviews", stdout=out)
+        call_command("generate_exploitation_interviews", stdout=out)
+        self.assertEqual(
+            Interview.objects.filter(employee=employee, type="annual").count(), 1
+        )
+
+
+class ImportHistoriqueTests(TestCase):
+    """L'import d'historique d'entretiens doit lire le type ligne par ligne
+    (colonne Type Entretien), avec repli sur le type par défaut transmis en
+    paramètre de requête si la colonne est vide."""
+
+    def setUp(self):
+        self.rh = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", matricule="00000500",
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh)
+
+    def _upload(self, csv_content, data_extra=None):
+        upload = SimpleUploadedFile(
+            "historique.csv", csv_content.encode("utf-8-sig"), content_type="text/csv"
+        )
+        data = {"file": upload}
+        if data_extra:
+            data.update(data_extra)
+        return self.client.post("/api/interviews/import_historique/", data, format="multipart")
+
+    def test_type_column_per_row_is_used(self):
+        csv_content = (
+            "Matricule,État,Date prévue,Date de réalisation,Type Entretien\n"
+            "00000500,Réalisé,01/06/2024,03/06/2024,Entretien professionnel\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+        interview = Interview.objects.get(employee=self.employee)
+        self.assertEqual(interview.type, "professional")
+
+    def test_type_column_accepts_internal_key(self):
+        csv_content = (
+            "Matricule,État,Date prévue,Date de réalisation,Type Entretien\n"
+            "00000500,Réalisé,01/06/2024,03/06/2024,bilan\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        interview = Interview.objects.get(employee=self.employee)
+        self.assertEqual(interview.type, "bilan")
+
+    def test_missing_type_column_falls_back_to_default_type_param(self):
+        csv_content = (
+            "Matricule,État,Date prévue,Date de réalisation\n"
+            "00000500,Réalisé,01/06/2024,03/06/2024\n"
+        )
+        response = self._upload(csv_content, {"type": "annual"})
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+        interview = Interview.objects.get(employee=self.employee)
+        self.assertEqual(interview.type, "annual")
+
+    def test_invalid_type_reports_row_error_without_crashing(self):
+        csv_content = (
+            "Matricule,État,Date prévue,Date de réalisation,Type Entretien\n"
+            "00000500,Réalisé,01/06/2024,03/06/2024,Type inconnu\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 0)
+        self.assertTrue(any("type d'entretien" in e.lower() for e in response.data["errors"]))

@@ -1,6 +1,9 @@
+import copy
+import csv
 import datetime
 import io
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from openpyxl import load_workbook
 from rest_framework.test import APIClient
@@ -238,7 +241,7 @@ class PreviousYearObjectivesBilanTests(TestCase):
         previous = Interview.objects.create(
             employee=self.employee, manager=self.rh_user, type="annual",
             status="completed", due_date=datetime.date(2025, 12, 31),
-            template=self.template, content={"sections": ANNUAL_TEMPLATE["sections"]},
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         content = previous.content
         for section in content["sections"]:
@@ -274,6 +277,217 @@ class PreviousYearObjectivesBilanTests(TestCase):
         interview = Interview.objects.get(pk=response.data["id"])
         section_ids = [s["id"] for s in interview.content["sections"]]
         self.assertNotIn("bilan_objectifs_precedents", section_ids)
+
+
+def _find_question(sections, question_id):
+    for section in sections:
+        for question in section.get("questions", []):
+            if question.get("id") == question_id:
+                return question
+    return None
+
+
+class ObjectifTablesTests(TestCase):
+    """L'entretien d'évaluation contient un tableau "Objectif à évaluer"
+    (pré-rempli avec les objectifs définis l'année précédente) et un
+    tableau "Objectif à définir" (vide)."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager,
+        )
+        self.template = InterviewTemplate.objects.create(
+            name="Annuel", type="annual", sections=copy.deepcopy(ANNUAL_TEMPLATE["sections"]),
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_annual_template_has_both_objectif_tables(self):
+        evaluer = _find_question(ANNUAL_TEMPLATE["sections"], "objectif_a_evaluer")
+        definir = _find_question(ANNUAL_TEMPLATE["sections"], "objectif_a_definir")
+        expected_col_ids = [
+            "theme", "objectif", "date_realisation", "niveau_realisation",
+            "note_collaborateur", "remarque_collaborateur", "note_manager", "remarque_manager",
+        ]
+        for question in (evaluer, definir):
+            self.assertIsNotNone(question)
+            self.assertEqual(question["type"], "table")
+            self.assertEqual([c["id"] for c in question["columns"]], expected_col_ids)
+
+    def test_first_annual_interview_has_empty_objectif_tables(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        definir = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertTrue(all(cell is None for row in evaluer["answer"] for cell in row))
+        self.assertTrue(all(cell is None for row in definir["answer"] for cell in row))
+
+    def test_new_annual_interview_prefills_objectif_a_evaluer_from_previous_definir(self):
+        previous_rows = [
+            ["Qualité", "Réduire les défauts", "", "", None, "", None, ""],
+            ["Formation", "Suivre une certification", "", "", None, "", None, ""],
+        ]
+        previous = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        content = previous.content
+        definir = _find_question(content["sections"], "objectif_a_definir")
+        definir["answer"] = previous_rows
+        previous.content = content
+        previous.save()
+
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        new_interview = Interview.objects.get(pk=response.data["id"])
+        evaluer = _find_question(new_interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(evaluer["answer"], previous_rows)
+
+    def test_campaign_generate_prefills_objectif_a_evaluer_from_previous_definir(self):
+        previous_rows = [["Qualité", "Réduire les défauts", "", "", None, "", None, ""]]
+        previous = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="signed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        content = previous.content
+        definir = _find_question(content["sections"], "objectif_a_definir")
+        definir["answer"] = previous_rows
+        previous.content = content
+        previous.save()
+
+        campaign = Campaign.objects.create(
+            name="Campagne annuelle 2026",
+            template=self.template,
+            start_date=datetime.date(2026, 1, 1),
+            due_date=datetime.date(2026, 12, 31),
+            population_filter={"employees": [self.employee.id]},
+        )
+        response = self.client.post(f"/api/campaigns/{campaign.id}/generate/")
+        self.assertEqual(response.status_code, 200, response.data)
+        interview = Interview.objects.get(campaign=campaign, employee=self.employee)
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(evaluer["answer"], previous_rows)
+
+
+class ImportObjectifsAEvaluerTests(TestCase):
+    """L'import CSV Matricule/Définition/Thème/Date de réalisation ajoute
+    des lignes au tableau "Objectif à évaluer" de l'entretien d'évaluation
+    en cours du collaborateur."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager, matricule="00000800",
+        )
+        self.template = InterviewTemplate.objects.create(
+            name="Annuel", type="annual", sections=copy.deepcopy(ANNUAL_TEMPLATE["sections"]),
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def _upload(self, csv_content):
+        upload = SimpleUploadedFile(
+            "objectifs.csv", csv_content.encode("utf-8-sig"), content_type="text/csv"
+        )
+        return self.client.post(
+            "/api/interviews/import_objectifs_a_evaluer/", {"file": upload}, format="multipart"
+        )
+
+    def test_import_appends_row_to_objectif_a_evaluer_table(self):
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="draft", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+
+        interview.refresh_from_db()
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(len(evaluer["answer"]), 1)
+        theme, objectif, date_realisation = evaluer["answer"][0][:3]
+        self.assertEqual(theme, "Qualité")
+        self.assertEqual(objectif, "Réduire les défauts")
+        self.assertEqual(date_realisation, "2026-12-31")
+
+    def test_import_accepts_unaccented_headers(self):
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="in_progress", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Definition,Theme,Date de realisation\n"
+            "00000800,Suivre une formation,Compétences,15/06/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+
+    def test_import_reports_error_when_no_current_interview(self):
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 0)
+        self.assertTrue(any("aucun entretien" in e.lower() for e in response.data["errors"]))
+
+    def test_import_reports_error_for_unknown_matricule(self):
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00099999,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 0)
+        self.assertTrue(any("aucun collaborateur" in e.lower() for e in response.data["errors"]))
+
+    def test_import_completed_interview_is_not_targeted(self):
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 0)
 
 
 class PrintTemplateTests(TestCase):
@@ -509,6 +723,59 @@ class ExcelExportFormulaInjectionTests(TestCase):
         cell_value = ws.cell(row=2, column=answer_col).value
         self.assertTrue(cell_value.startswith("'="))
         self.assertIn("cmd", cell_value)
+
+
+class CampaignExportMatriculeTests(TestCase):
+    """Les exports de campagne doivent inclure le matricule du collaborateur
+    et celui de son manager."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234",
+            role="manager", matricule="00000700",
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager, matricule="00000701",
+        )
+        self.campaign = Campaign.objects.create(
+            name="Campagne matricules",
+            start_date=datetime.date(2026, 1, 1),
+            due_date=datetime.date(2026, 12, 31),
+        )
+        self.interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, campaign=self.campaign,
+            type="annual", due_date=datetime.date(2026, 12, 31),
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_export_contents_xlsx_includes_matricules(self):
+        response = self.client.get(f"/api/campaigns/{self.campaign.id}/export_contents_xlsx/")
+        self.assertEqual(response.status_code, 200)
+        wb = load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        headers = [c.value for c in ws[1]]
+        self.assertIn("Matricule", headers)
+        self.assertIn("Matricule manager", headers)
+        matricule_col = headers.index("Matricule") + 1
+        manager_matricule_col = headers.index("Matricule manager") + 1
+        self.assertEqual(ws.cell(row=2, column=matricule_col).value, "00000701")
+        self.assertEqual(ws.cell(row=2, column=manager_matricule_col).value, "00000700")
+
+    def test_export_csv_includes_matricules(self):
+        response = self.client.get(
+            "/api/interviews/export_csv/", {"campaign_id": self.campaign.id}
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8-sig")
+        rows = list(csv.reader(io.StringIO(content)))
+        header = rows[0]
+        self.assertIn("Matricule", header)
+        self.assertIn("Matricule manager", header)
 
 
 class InterviewTemplateSectionsValidationTests(TestCase):

@@ -46,6 +46,7 @@ export default function UserForm() {
   const [showManagerDropdown, setShowManagerDropdown] = useState(false);
   const managerFieldRef = useRef<HTMLDivElement>(null);
   const [agenceInterim, setAgenceInterim] = useState("");
+  const [enExploitation, setEnExploitation] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState("");
@@ -118,6 +119,7 @@ export default function UserForm() {
       setSite(d.site ?? "");
       setManager(d.manager ?? "");
       setAgenceInterim(d.agence_interim ?? "");
+      setEnExploitation(d.en_exploitation ?? false);
     });
   }, [id]);
 
@@ -190,6 +192,7 @@ export default function UserForm() {
       site: site || null,
       manager: role === "rh" ? null : manager || null,
       agence_interim: agenceInterim,
+      en_exploitation: enExploitation,
     };
 
     try {
@@ -575,6 +578,10 @@ export default function UserForm() {
                 <Input value={agenceInterim} onChange={(e) => setAgenceInterim(e.target.value)} />
               </div>
             )}
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={enExploitation} onChange={(e) => setEnExploitation(e.target.checked)} className="h-4 w-4" />
+              En exploitation (entretiens d'évaluation et professionnel tous les 2 ans)
+            </label>
           </CardContent>
         </Card>
 

@@ -330,12 +330,12 @@ class UserViewSet(viewsets.ModelViewSet):
         if not value:
             return None
         from datetime import datetime
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y", "%d-%m-%Y", "%d.%m.%Y"):
             try:
                 return datetime.strptime(value, fmt).date()
             except ValueError:
                 continue
-        return None
+        raise ValueError(f"date '{value}' invalide (attendu JJ/MM/AAAA)")
 
     @action(detail=False, methods=["post"])
     def import_csv(self, request):
@@ -354,6 +354,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
         created = 0
         errors = []
+        total = 0
 
         type_contrat_map = {
             "cdi": "cdi", "CDI": "cdi",
@@ -364,6 +365,7 @@ class UserViewSet(viewsets.ModelViewSet):
         }
 
         for row_num, row in enumerate(reader, start=2):
+            total += 1
             first_name = row.get("Prénom", "").strip()
             last_name = row.get("Nom", "").strip()
             matricule = row.get("Matricule", "").strip()
@@ -404,12 +406,12 @@ class UserViewSet(viewsets.ModelViewSet):
 
             type_contrat = type_contrat_map.get(row.get("Type contrat", "").strip(), "")
 
-            date_naissance = self._parse_date(row.get("Date de naissance", "").strip())
-            hire_date = self._parse_date(row.get("Date d'embauche", "").strip())
-            date_sortie = self._parse_date(row.get("Date de sortie", "").strip())
-            statut = "sortie" if date_sortie else "actif"
-
             try:
+                date_naissance = self._parse_date(row.get("Date de naissance", "").strip())
+                hire_date = self._parse_date(row.get("Date d'embauche", "").strip())
+                date_sortie = self._parse_date(row.get("Date de sortie", "").strip())
+                statut = "sortie" if date_sortie else "actif"
+
                 user, created_flag = User.objects.get_or_create(
                     matricule=matricule,
                     defaults={
@@ -443,7 +445,7 @@ class UserViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 errors.append(f"Ligne {row_num} ({matricule}): {e}")
 
-        return Response({"created": created, "errors": errors, "total": len(reader)})
+        return Response({"created": created, "errors": errors, "total": total})
 
     @action(detail=False, methods=["post"])
     def import_formations(self, request):
@@ -814,18 +816,15 @@ class UserViewSet(viewsets.ModelViewSet):
                 type_contrat = type_contrat_map.get(type_contrat_val, "")
 
                 # Statut actif/inactif/sortie
-                statut = "actif"
-                if date_sortie:
-                    sortie_date = self._parse_date(row.get("Date de sortie", "").strip())
-                    if sortie_date:
-                        statut = "sortie"
+                statut = "sortie" if date_sortie else "actif"
 
                 coefficient = row.get("Coefficient", "").strip()
 
                 forfait_jour = row.get("Forfait jour", "false").strip().lower() == "true"
                 tickets_restaurant = row.get("Tickets restaurant", "false").strip().lower() == "true"
 
-                agence_interim = row.get("Agence d'intérim", "").strip()
+                exploitation_val = row.get("Exploitation", "").strip().lower()
+                en_exploitation = exploitation_val in ("oui", "yes", "true", "1")
 
                 # Déterminer le rôle applicatif
                 role_map = {"collaborateur": "employee", "manager": "manager"}
@@ -859,7 +858,7 @@ class UserViewSet(viewsets.ModelViewSet):
                         "forfait_jour": forfait_jour,
                         "tickets_restaurant": tickets_restaurant,
                         "cadre": cadre,
-                        "agence_interim": agence_interim,
+                        "en_exploitation": en_exploitation,
                         "hire_date": hire_date,
                         "date_sortie": date_sortie,
                     },
@@ -887,7 +886,7 @@ class UserViewSet(viewsets.ModelViewSet):
                         ("forfait_jour", forfait_jour),
                         ("tickets_restaurant", tickets_restaurant),
                         ("cadre", cadre),
-                        ("agence_interim", agence_interim),
+                        ("en_exploitation", en_exploitation),
                         ("hire_date", hire_date),
                         ("date_sortie", date_sortie),
                     ]:
