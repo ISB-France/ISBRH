@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Copy, Trash2, Upload } from "lucide-react";
+import { Plus, Copy, Trash2, Upload, FileUp } from "lucide-react";
 import { Toast, useToast } from "../components/Toast";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -31,6 +31,7 @@ export default function Templates() {
   const [editingList, setEditingList] = useState<{ id: number | null; name: string; itemsText: string } | null>(null);
   const [deleteListId, setDeleteListId] = useState<number | null>(null);
   const listsFileRef = useRef<HTMLInputElement>(null);
+  const objectifsFileRef = useRef<HTMLInputElement>(null);
   const { toast, show, setToast } = useToast();
 
   const { data: templates, isLoading, error, refetch } = useQuery<InterviewTemplate[]>({
@@ -100,6 +101,17 @@ export default function Templates() {
     e.target.value = "";
   };
 
+  const handleImportObjectifsAEvaluer = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append("file", file);
+    const res = await api.post("/interviews/import_objectifs_a_evaluer/", form);
+    const msg = `${res.data.created} objectif(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
+    show(msg, res.data.errors?.length ? "error" : "success");
+    e.target.value = "";
+  };
+
   if (showLists ? listsLoading : isLoading) return <LoadingScreen />;
   if (showLists && listsError) return <ErrorScreen message="Impossible de charger les listes" onRetry={refetchLists} />;
   if (!showLists && error) return <ErrorScreen message="Impossible de charger les modèles" onRetry={refetch} />;
@@ -122,10 +134,20 @@ export default function Templates() {
               </Button>
             </>
           ) : (
-            <Button onClick={() => navigate("/templates/new")} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nouveau modèle
-            </Button>
+            <>
+              <label
+                className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary"
+                title="Colonnes attendues : Matricule, Définition, Thème, Date de réalisation"
+              >
+                <FileUp className="h-4 w-4" />
+                Importer objectifs à évaluer
+                <input ref={objectifsFileRef} type="file" accept=".csv" onChange={handleImportObjectifsAEvaluer} hidden />
+              </label>
+              <Button onClick={() => navigate("/templates/new")} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nouveau modèle
+              </Button>
+            </>
           )}
         </div>
       </div>
