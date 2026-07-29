@@ -418,6 +418,52 @@ class ImportDeduplicationTests(TestCase):
         self.assertTrue(User.objects.get(matricule="00000124").en_exploitation)
         self.assertFalse(User.objects.get(matricule="00000125").en_exploitation)
 
+    def test_import_kostango_accepts_alternate_date_formats(self):
+        kostango_csv = (
+            "personne email,Prénom,Nom,Matricule,Date de naissance,Date d'embauche,Date de sortie\n"
+            "a@isb.fr,Alice,DURAND,00000126,15/03/85,15-03-2010,15.03.2020\n"
+        )
+        response = self.client.post(
+            "/api/users/import_kostango/",
+            {"file": _csv_upload("kostango.csv", kostango_csv)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        user = User.objects.get(matricule="00000126")
+        self.assertEqual(str(user.date_naissance), "1985-03-15")
+        self.assertEqual(str(user.hire_date), "2010-03-15")
+        self.assertEqual(str(user.date_sortie), "2020-03-15")
+
+    def test_import_kostango_rejects_unparseable_date_with_row_error(self):
+        kostango_csv = (
+            "personne email,Prénom,Nom,Matricule,Date de naissance\n"
+            "a@isb.fr,Alice,DURAND,00000127,pas-une-date\n"
+        )
+        response = self.client.post(
+            "/api/users/import_kostango/",
+            {"file": _csv_upload("kostango.csv", kostango_csv)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(User.objects.filter(matricule="00000127").exists())
+        self.assertTrue(any("date" in e.lower() for e in response.data["errors"]))
+
+    def test_import_csv_rejects_unparseable_date_without_crashing_whole_import(self):
+        csv_content = (
+            "Prénom,Nom,Matricule,Date de naissance\n"
+            "Alice,DURAND,00000128,31-13-2020\n"
+            "Bob,MOREAU,00000129,10/05/1990\n"
+        )
+        response = self.client.post(
+            "/api/users/import_csv/",
+            {"file": _csv_upload("users.csv", csv_content)},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(User.objects.filter(matricule="00000128").exists())
+        self.assertTrue(User.objects.filter(matricule="00000129").exists())
+        self.assertTrue(any("date" in e.lower() for e in response.data["errors"]))
+
     def test_import_collaborateurs_unknown_matricule_creates_temp_email_user(self):
         collaborateurs_csv = (
             "Matricule,Nom,Prénom,Date de naissance,Date d'entrée,Statut,Niveau,Coefficient,Poste,Fonctionnement\n"

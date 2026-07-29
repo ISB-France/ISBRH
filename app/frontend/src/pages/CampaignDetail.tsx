@@ -38,7 +38,7 @@ export default function CampaignDetail() {
     queryFn: () => api.get(`/campaigns/${id}/`).then((r) => r.data),
   });
 
-  const { data: interviews } = useQuery<Interview[]>({
+  const { data: interviews, isLoading: interviewsLoading } = useQuery<Interview[]>({
     queryKey: ["interviews", "campaign", id],
     queryFn: () => api.get("/interviews/", { params: { campaign: id, page_size: 200 } }).then((r) => r.data.results),
   });
@@ -162,7 +162,12 @@ export default function CampaignDetail() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 relative">
+          {interviewsLoading && (
+            <div className="absolute right-4 top-4 z-10">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          )}
           <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -182,7 +187,14 @@ export default function CampaignDetail() {
               </tr>
             </thead>
             <tbody>
-              {interviews?.length === 0 && (
+              {interviewsLoading && interviews === undefined && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-muted-foreground">
+                    Chargement des entretiens...
+                  </td>
+                </tr>
+              )}
+              {!interviewsLoading && interviews?.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-sm text-muted-foreground">
                     Aucun entretien généré. Cliquez sur "Générer les entretiens".
