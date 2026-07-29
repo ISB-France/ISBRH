@@ -203,6 +203,7 @@ export default function Interviews() {
             <select
               value={historiqueType}
               onChange={(e) => setHistoriqueType(e.target.value)}
+              title="Type par défaut si la colonne Type Entretien est vide"
               className="h-10 rounded-md border border-border bg-white px-3 text-sm"
             >
               {Object.entries(interviewTypeLabel).map(([k, v]) => (

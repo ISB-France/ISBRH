@@ -285,14 +285,14 @@ class InterviewViewSet(viewsets.ModelViewSet):
     def import_historique(self, request):
         """Importe en masse des entretiens historiques (métadonnées
         uniquement, sans contenu détaillé) : État, Date prévue,
-        Date de réalisation, Matricule. Le type d'entretien est choisi une
-        fois pour tout le fichier."""
+        Date de réalisation, Type Entretien, Matricule. Le type d'entretien
+        est lu ligne par ligne (colonne "Type Entretien"), avec repli sur le
+        type transmis en paramètre de requête si la colonne est absente ou
+        vide sur une ligne."""
         if request.user.role not in RH_ROLES:
             return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
 
-        interview_type = request.data.get("type", "").strip()
-        if interview_type not in dict(Interview.Type.choices):
-            return Response({"error": "Type d'entretien invalide"}, status=status.HTTP_400_BAD_REQUEST)
+        default_type = request.data.get("type", "").strip()
 
         file = request.FILES.get("file")
         if not file:
@@ -311,6 +311,9 @@ class InterviewViewSet(viewsets.ModelViewSet):
             "realise": "completed", "réalisé": "completed", "realisé": "completed", "réalise": "completed",
         }
 
+        type_map = {key.lower(): key for key, _ in Interview.Type.choices}
+        type_map.update({label.lower(): key for key, label in Interview.Type.choices})
+
         created = 0
         errors = []
         for row_num, row in enumerate(reader, start=2):
@@ -321,6 +324,12 @@ class InterviewViewSet(viewsets.ModelViewSet):
             employee = User.objects.filter(matricule=matricule).first()
             if not employee:
                 errors.append(f"Ligne {row_num}: aucun collaborateur avec le matricule {matricule}")
+                continue
+
+            type_raw = row.get("Type Entretien", "").strip() or default_type
+            interview_type = type_map.get(type_raw.lower())
+            if not interview_type:
+                errors.append(f"Ligne {row_num} ({matricule}): type d'entretien '{type_raw}' invalide")
                 continue
 
             try:
