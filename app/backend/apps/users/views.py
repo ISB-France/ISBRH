@@ -825,7 +825,8 @@ class UserViewSet(viewsets.ModelViewSet):
                 forfait_jour = row.get("Forfait jour", "false").strip().lower() == "true"
                 tickets_restaurant = row.get("Tickets restaurant", "false").strip().lower() == "true"
 
-                agence_interim = row.get("Agence d'intérim", "").strip()
+                exploitation_val = row.get("Exploitation", "").strip().lower()
+                en_exploitation = exploitation_val in ("oui", "yes", "true", "1")
 
                 # Déterminer le rôle applicatif
                 role_map = {"collaborateur": "employee", "manager": "manager"}
@@ -859,7 +860,7 @@ class UserViewSet(viewsets.ModelViewSet):
                         "forfait_jour": forfait_jour,
                         "tickets_restaurant": tickets_restaurant,
                         "cadre": cadre,
-                        "agence_interim": agence_interim,
+                        "en_exploitation": en_exploitation,
                         "hire_date": hire_date,
                         "date_sortie": date_sortie,
                     },
@@ -887,7 +888,7 @@ class UserViewSet(viewsets.ModelViewSet):
                         ("forfait_jour", forfait_jour),
                         ("tickets_restaurant", tickets_restaurant),
                         ("cadre", cadre),
-                        ("agence_interim", agence_interim),
+                        ("en_exploitation", en_exploitation),
                         ("hire_date", hire_date),
                         ("date_sortie", date_sortie),
                     ]:
