@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
-from apps.users.views import OIDCAuthenticationRequestView, OIDCCallbackView, MeView, UserViewSet, SiteViewSet, ServiceViewSet, PositionViewSet, NotificationViewSet, DevLoginView, LogoutView, ProfileAvatarView, SSOLoginView
+from apps.users.views import OIDCAuthenticationRequestView, OIDCCallbackView, MeView, UserViewSet, SiteViewSet, ServiceViewSet, PositionViewSet, NotificationViewSet, LoginView, DevLoginView, LogoutView, ProfileAvatarView, SSOLoginView
 from apps.interviews.views import AnswerListViewSet, CampaignViewSet, InterviewTemplateViewSet, InterviewViewSet
 
 router = DefaultRouter()
@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/auth/me/", MeView.as_view(), name="auth_me"),
     path("api/auth/profile/avatar/", ProfileAvatarView.as_view(), name="auth_profile_avatar"),
     path("api/auth/sso/", SSOLoginView.as_view(), name="auth_sso"),
+    path("api/auth/login/", LoginView.as_view(), name="auth_login"),
     path("api/auth/dev-login/", DevLoginView.as_view(), name="auth_dev_login"),
     path("api/auth/logout/", LogoutView.as_view(), name="auth_logout"),
     path("api/services/", ServiceViewSet.as_view({"get": "list", "post": "create"}), name="service-list"),

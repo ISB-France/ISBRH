@@ -16,12 +16,12 @@ export default function LoginPage() {
     window.location.href = "/api/auth/authenticate/";
   };
 
-  const handleDevLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
     try {
-      const res = await api.post("/auth/dev-login/", { email, password });
+      const res = await api.post("/auth/login/", { email, password });
       localStorage.setItem("access_token", res.data.access);
       localStorage.setItem("refresh_token", res.data.refresh);
       window.location.href = "/";
@@ -61,7 +61,7 @@ export default function LoginPage() {
           <Separator className="flex-1" />
         </div>
 
-        <form onSubmit={handleDevLogin} className="space-y-3">
+        <form onSubmit={handleLogin} className="space-y-3">
           <p className="text-xs text-muted-foreground">Connexion Mail</p>
           <Input
             type="email"
