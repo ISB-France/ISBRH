@@ -131,6 +131,18 @@ export default function Templates() {
       </div>
 
       <div className="mb-4 flex items-center gap-3">
+        {!showLists && (
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-10 rounded-md border border-border bg-white px-3 text-sm"
+          >
+            <option value="">Tous les types</option>
+            {Object.entries(typeLabel).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        )}
         <div className="inline-flex rounded-md border border-border">
           <button
             className={`px-4 py-2 text-sm font-medium transition-colors ${!showLists ? "bg-primary-foreground text-primary" : "bg-white text-muted-foreground hover:bg-muted/50"}`}
@@ -145,18 +157,6 @@ export default function Templates() {
             Listes
           </button>
         </div>
-        {!showLists && (
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-10 rounded-md border border-border bg-white px-3 text-sm"
-          >
-            <option value="">Tous les types</option>
-            {Object.entries(typeLabel).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
-          </select>
-        )}
       </div>
 
       {editingList && (
