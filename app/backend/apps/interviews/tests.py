@@ -1,3 +1,4 @@
+import copy
 import csv
 import datetime
 import io
@@ -239,7 +240,7 @@ class PreviousYearObjectivesBilanTests(TestCase):
         previous = Interview.objects.create(
             employee=self.employee, manager=self.rh_user, type="annual",
             status="completed", due_date=datetime.date(2025, 12, 31),
-            template=self.template, content={"sections": ANNUAL_TEMPLATE["sections"]},
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         content = previous.content
         for section in content["sections"]:
@@ -275,6 +276,116 @@ class PreviousYearObjectivesBilanTests(TestCase):
         interview = Interview.objects.get(pk=response.data["id"])
         section_ids = [s["id"] for s in interview.content["sections"]]
         self.assertNotIn("bilan_objectifs_precedents", section_ids)
+
+
+def _find_question(sections, question_id):
+    for section in sections:
+        for question in section.get("questions", []):
+            if question.get("id") == question_id:
+                return question
+    return None
+
+
+class ObjectifTablesTests(TestCase):
+    """L'entretien d'évaluation contient un tableau "Objectif à évaluer"
+    (pré-rempli avec les objectifs définis l'année précédente) et un
+    tableau "Objectif à définir" (vide)."""
+
+    def setUp(self):
+        self.rh_user = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager,
+        )
+        self.template = InterviewTemplate.objects.create(
+            name="Annuel", type="annual", sections=copy.deepcopy(ANNUAL_TEMPLATE["sections"]),
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.rh_user)
+
+    def test_annual_template_has_both_objectif_tables(self):
+        evaluer = _find_question(ANNUAL_TEMPLATE["sections"], "objectif_a_evaluer")
+        definir = _find_question(ANNUAL_TEMPLATE["sections"], "objectif_a_definir")
+        expected_col_ids = [
+            "theme", "objectif", "date_realisation", "niveau_realisation",
+            "note_collaborateur", "remarque_collaborateur", "note_manager", "remarque_manager",
+        ]
+        for question in (evaluer, definir):
+            self.assertIsNotNone(question)
+            self.assertEqual(question["type"], "table")
+            self.assertEqual([c["id"] for c in question["columns"]], expected_col_ids)
+
+    def test_first_annual_interview_has_empty_objectif_tables(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        definir = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertTrue(all(cell is None for row in evaluer["answer"] for cell in row))
+        self.assertTrue(all(cell is None for row in definir["answer"] for cell in row))
+
+    def test_new_annual_interview_prefills_objectif_a_evaluer_from_previous_definir(self):
+        previous_rows = [
+            ["Qualité", "Réduire les défauts", "", "", None, "", None, ""],
+            ["Formation", "Suivre une certification", "", "", None, "", None, ""],
+        ]
+        previous = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        content = previous.content
+        definir = _find_question(content["sections"], "objectif_a_definir")
+        definir["answer"] = previous_rows
+        previous.content = content
+        previous.save()
+
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        new_interview = Interview.objects.get(pk=response.data["id"])
+        evaluer = _find_question(new_interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(evaluer["answer"], previous_rows)
+
+    def test_campaign_generate_prefills_objectif_a_evaluer_from_previous_definir(self):
+        previous_rows = [["Qualité", "Réduire les défauts", "", "", None, "", None, ""]]
+        previous = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="signed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        content = previous.content
+        definir = _find_question(content["sections"], "objectif_a_definir")
+        definir["answer"] = previous_rows
+        previous.content = content
+        previous.save()
+
+        campaign = Campaign.objects.create(
+            name="Campagne annuelle 2026",
+            template=self.template,
+            start_date=datetime.date(2026, 1, 1),
+            due_date=datetime.date(2026, 12, 31),
+            population_filter={"employees": [self.employee.id]},
+        )
+        response = self.client.post(f"/api/campaigns/{campaign.id}/generate/")
+        self.assertEqual(response.status_code, 200, response.data)
+        interview = Interview.objects.get(campaign=campaign, employee=self.employee)
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(evaluer["answer"], previous_rows)
 
 
 class PrintTemplateTests(TestCase):

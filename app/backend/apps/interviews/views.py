@@ -66,11 +66,49 @@ def build_previous_year_bilan_sections(employee, interview_type):
                 "answer": {"statut": "", "commentaire": ""},
             }
             for q in source["questions"]
-            if q.get("answer")
+            if q.get("answer") and q.get("type") != "table"
         ]
         if questions:
             bilan_sections.append({"id": new_id, "title": new_title, "questions": questions})
     return bilan_sections
+
+
+OBJECTIF_A_DEFINIR_ID = "objectif_a_definir"
+OBJECTIF_A_EVALUER_ID = "objectif_a_evaluer"
+
+
+def carry_forward_objectifs_table(employee, interview_type, sections):
+    """Pour un entretien annuel, reprend le tableau "Objectif à définir"
+    rempli lors de l'entretien annuel précédent (ex: 2025) pour pré-remplir
+    le tableau "Objectif à évaluer" de l'entretien en cours (ex: 2026)."""
+    if interview_type != "annual":
+        return sections
+
+    previous = (
+        Interview.objects.filter(employee=employee, type="annual", status__in=("completed", "signed"))
+        .order_by("-created_at")
+        .first()
+    )
+    if not previous:
+        return sections
+
+    previous_rows = None
+    for section in previous.content.get("sections", []):
+        for question in section.get("questions", []):
+            if question.get("id") == OBJECTIF_A_DEFINIR_ID:
+                previous_rows = question.get("answer")
+                break
+        if previous_rows:
+            break
+    if not previous_rows:
+        return sections
+
+    sections = copy.deepcopy(list(sections))
+    for section in sections:
+        for question in section.get("questions", []):
+            if question.get("id") == OBJECTIF_A_EVALUER_ID:
+                question["answer"] = copy.deepcopy(previous_rows)
+    return sections
 
 
 DEFAULT_TABLE_ROWS = 5
@@ -236,6 +274,9 @@ class InterviewViewSet(viewsets.ModelViewSet):
             bilan_sections = build_previous_year_bilan_sections(employee, interview_type)
             if bilan_sections:
                 content["sections"] = bilan_sections + list(content.get("sections", []))
+            content["sections"] = carry_forward_objectifs_table(
+                employee, interview_type, content.get("sections", [])
+            )
         content["sections"] = apply_default_sections(content.get("sections", []))
         serializer.validated_data["content"] = content
         serializer.save(manager=employee.manager if employee else None)
@@ -724,6 +765,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             bilan_sections = build_previous_year_bilan_sections(user, template.type)
             if bilan_sections:
                 sections = bilan_sections + sections
+            sections = carry_forward_objectifs_table(user, template.type, sections)
             sections = apply_default_sections(sections)
             _, was_created = Interview.objects.get_or_create(
                 campaign=campaign,
