@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Plus, X, ChevronUp, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -6,7 +7,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import AppLayout from "../components/AppLayout";
 import api from "../api";
-import type { Section, Question, TableColumn } from "../types";
+import type { Section, Question, TableColumn, AnswerList } from "../types";
 
 let sectionCounter = 0;
 let questionCounter = 0;
@@ -37,6 +38,11 @@ export default function TemplateForm() {
   const [type, setType] = useState("annual");
   const [description, setDescription] = useState("");
   const [sections, setSections] = useState<Section[]>([newSection()]);
+
+  const { data: answerLists } = useQuery<AnswerList[]>({
+    queryKey: ["answer-lists"],
+    queryFn: () => api.get("/answer-lists/").then((r) => r.data),
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -92,7 +98,7 @@ export default function TemplateForm() {
     setSections(next);
   };
 
-  const updateQuestion = (sIdx: number, qIdx: number, field: "label" | "type", value: string) => {
+  const updateQuestion = (sIdx: number, qIdx: number, field: "label" | "type" | "list_name", value: string) => {
     const next = [...sections];
     const qs = [...next[sIdx].questions];
     const updated = { ...qs[qIdx], [field]: value };
@@ -121,7 +127,7 @@ export default function TemplateForm() {
     setSections(next);
   };
 
-  const updateColumn = (sIdx: number, qIdx: number, cIdx: number, field: "label" | "type", value: string) => {
+  const updateColumn = (sIdx: number, qIdx: number, cIdx: number, field: "label" | "type" | "list_name", value: string) => {
     const next = [...sections];
     const qs = [...next[sIdx].questions];
     const cols = [...(qs[qIdx].columns || [])];
@@ -264,7 +270,20 @@ export default function TemplateForm() {
                         <option value="rating">Note (1-5)</option>
                         <option value="yesno">Oui / Non</option>
                         <option value="table">Tableau</option>
+                        <option value="dropdown">Liste déroulante</option>
                       </select>
+                      {q.type === "dropdown" && (
+                        <select
+                          value={q.list_name || ""}
+                          onChange={(e) => updateQuestion(sIdx, qIdx, "list_name", e.target.value)}
+                          className="h-8 rounded-md border border-border bg-white px-2 text-xs"
+                        >
+                          <option value="">Choisir une liste...</option>
+                          {answerLists?.map((l) => (
+                            <option key={l.id} value={l.name}>{l.name}</option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                     <div className="mt-1 flex flex-col">
                       <button type="button" onClick={() => moveQuestion(sIdx, qIdx, -1)} disabled={qIdx === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30">
@@ -306,7 +325,20 @@ export default function TemplateForm() {
                             >
                               <option value="textarea">Texte long</option>
                               <option value="rating">Note (1-5)</option>
+                              <option value="liste">Liste</option>
                             </select>
+                            {col.type === "liste" && (
+                              <select
+                                value={col.list_name || ""}
+                                onChange={(e) => updateColumn(sIdx, qIdx, cIdx, "list_name", e.target.value)}
+                                className="h-7 rounded-md border border-border bg-white px-2 text-xs"
+                              >
+                                <option value="">Choisir une liste...</option>
+                                {answerLists?.map((l) => (
+                                  <option key={l.id} value={l.name}>{l.name}</option>
+                                ))}
+                              </select>
+                            )}
                           </div>
                           <Button type="button" size="icon" variant="ghost" onClick={() => removeColumn(sIdx, qIdx, cIdx)} className="mt-1 h-7 w-7">
                             <X className="h-3 w-3" />

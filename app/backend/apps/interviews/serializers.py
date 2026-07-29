@@ -1,10 +1,21 @@
 from rest_framework import serializers
-from .models import Campaign, Interview, InterviewTemplate
+from .models import AnswerList, Campaign, Interview, InterviewTemplate
 from apps.users.models import Service, Site, User
 from apps.users.serializers import UserSerializer
 
 
-ALLOWED_QUESTION_TYPES = {"textarea", "rating", "yesno", "table"}
+ALLOWED_QUESTION_TYPES = {"textarea", "rating", "yesno", "table", "dropdown"}
+
+
+class AnswerListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnswerList
+        fields = ["id", "name", "items"]
+
+    def validate_items(self, value):
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise serializers.ValidationError("items doit être une liste de textes.")
+        return value
 
 
 class InterviewTemplateSerializer(serializers.ModelSerializer):

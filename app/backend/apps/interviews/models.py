@@ -21,6 +21,19 @@ class Campaign(models.Model):
         return self.name
 
 
+class AnswerList(models.Model):
+    """Liste réutilisable de choix (ex: Compétences) proposée dans les
+    questions de type "dropdown" ou les colonnes de tableau de type "liste"."""
+    name = models.CharField(max_length=100, unique=True)
+    items = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 TYPE_CHOICES = [
     ("annual", "Entretien d'évaluation"),
     ("professional", "Entretien professionnel"),
