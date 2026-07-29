@@ -31,7 +31,7 @@ Import principal depuis l'export Kostango. Crée ou met à jour les utilisateurs
 | `Coefficient` | Coefficient | `250` | non |
 | `Forfait jour` | `true` / `false` | `true` | non |
 | `Tickets restaurant` | `true` / `false` | `true` | non |
-| `Agence d'intérim` | Agence (intérim uniquement) | `Supplay` | non |
+| `Exploitation` | `Oui` / `Non` — active les entretiens d'évaluation et professionnel tous les 2 ans | `Oui` | non |
 | `valideur N+1` | Nom complet du N+1 (résolu en 2ème passe) | `Marie MARTIN` | non |
 
 ### Règles
@@ -45,8 +45,8 @@ Import principal depuis l'export Kostango. Crée ou met à jour les utilisateurs
 
 ### Exemple de ligne
 ```
-Prénom,Nom,Matricule,personne email,Date de naissance,Date d'embauche,Date de sortie,Sexe,Site (nom complet),Poste,Type contrat,Statut,Coefficient,Forfait jour,Tickets restaurant,Agence d'intérim,valideur N+1
-Jean,DUPONT,00000001,jean.dupont@isb.fr,15/03/1985,01/09/2020,,Homme,ISB France > Paris,Développeur,CDI,Cadre,250,true,true,,Marie MARTIN
+Prénom,Nom,Matricule,personne email,Date de naissance,Date d'embauche,Date de sortie,Sexe,Site (nom complet),Poste,Type contrat,Statut,Coefficient,Forfait jour,Tickets restaurant,Exploitation,valideur N+1
+Jean,DUPONT,00000001,jean.dupont@isb.fr,15/03/1985,01/09/2020,,Homme,ISB France > Paris,Développeur,CDI,Cadre,250,true,true,Non,Marie MARTIN
 ```
 
 ---
