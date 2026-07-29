@@ -188,11 +188,14 @@ class InterviewViewSet(viewsets.ModelViewSet):
 
         type_filter = self.request.query_params.get("type")
         status_filter = self.request.query_params.get("status")
+        campaign_filter = self.request.query_params.get("campaign")
         if type_filter:
             qs = qs.filter(type=type_filter)
         if status_filter:
             status_list = status_filter.split(",")
             qs = qs.filter(status__in=status_list)
+        if campaign_filter:
+            qs = qs.filter(campaign_id=campaign_filter)
 
         return qs
 
