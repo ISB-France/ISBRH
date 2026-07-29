@@ -1148,6 +1148,34 @@ class SSOLoginView(APIView):
         })
 
 
+class LoginThrottle(AnonRateThrottle):
+    scope = "login"
+
+
+class LoginView(APIView):
+    """Connexion par email/mot de passe utilisable en production."""
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [LoginThrottle]
+
+    def post(self, request):
+        from django.contrib.auth import authenticate
+
+        email = request.data.get("email", "").strip().lower()
+        password = request.data.get("password", "")
+
+        user = authenticate(request, username=email, password=password)
+        if not user:
+            return Response({"error": "Identifiants invalides"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": UserMeSerializer(user).data,
+        })
+
+
 class DevLoginThrottle(AnonRateThrottle):
     scope = "dev_login"
 
