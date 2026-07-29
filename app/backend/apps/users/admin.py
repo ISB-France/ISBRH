@@ -30,7 +30,7 @@ class UserAdmin(BaseUserAdmin):
         (None, {"fields": ("email", "password")}),
         ("Identité", {"fields": ("first_name", "last_name", "sexe", "date_naissance", "telephone", "photo")}),
         ("Contrat", {"fields": ("matricule", "hire_date", "date_sortie", "type_contrat", "statut", "niveau", "coefficient", "fonctionnement", "salaire_brut", "forfait_jour", "tickets_restaurant", "cadre")}),
-        ("Organisation", {"fields": ("role", "service", "position", "site", "manager", "agence_interim")}),
+        ("Organisation", {"fields": ("role", "service", "position", "site", "manager", "agence_interim", "en_exploitation")}),
         ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
         ("Dates", {"fields": ("last_login", "date_joined")}),
     )
