@@ -13,6 +13,7 @@ from mozilla_django_oidc.views import OIDCAuthenticationCallbackView as BaseCall
 
 from rest_framework import filters, generics, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
@@ -116,11 +117,25 @@ class ProfileAvatarView(APIView):
         return Response(serializer.data)
 
 
+class UserPagination(PageNumberPagination):
+    """Pagination désactivée par défaut (comportement historique : tableau
+    brut) — activée uniquement si le client envoie explicitement ?page=."""
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+    def get_page_size(self, request):
+        if not request.query_params.get("page"):
+            return None
+        return super().get_page_size(request)
+
+
 class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ["first_name", "last_name", "email"]
+    pagination_class = UserPagination
 
     def get_queryset(self):
         user = self.request.user
