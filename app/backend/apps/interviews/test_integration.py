@@ -268,3 +268,68 @@ class NotificationTests(TestCase):
                 user=manager, message__icontains="Échéance dans"
             ).exists()
         )
+
+
+class GenerateExploitationInterviewsTests(TestCase):
+    """Les collaborateurs en exploitation doivent recevoir un entretien
+    d'evaluation et un entretien professionnel tous les 2 ans."""
+
+    def test_employee_in_exploitation_without_history_gets_interviews_from_hire_date(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, en_exploitation=True,
+            hire_date=datetime.date.today() - datetime.timedelta(days=2 * 365),
+        )
+        out = io.StringIO()
+        call_command("generate_exploitation_interviews", stdout=out)
+        self.assertEqual(
+            Interview.objects.filter(employee=employee, type="annual").count(), 1
+        )
+        self.assertEqual(
+            Interview.objects.filter(employee=employee, type="professional").count(), 1
+        )
+
+    def test_employee_not_in_exploitation_gets_no_interview(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, en_exploitation=False,
+            hire_date=datetime.date.today() - datetime.timedelta(days=2 * 365),
+        )
+        out = io.StringIO()
+        call_command("generate_exploitation_interviews", stdout=out)
+        self.assertEqual(Interview.objects.count(), 0)
+
+    def test_employee_with_recent_hire_date_gets_no_interview_yet(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, en_exploitation=True,
+            hire_date=datetime.date.today() - datetime.timedelta(days=30),
+        )
+        out = io.StringIO()
+        call_command("generate_exploitation_interviews", stdout=out)
+        self.assertEqual(Interview.objects.filter(employee=employee).count(), 0)
+
+    def test_command_is_idempotent_when_interview_already_pending(self):
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, en_exploitation=True,
+            hire_date=datetime.date.today() - datetime.timedelta(days=2 * 365),
+        )
+        out = io.StringIO()
+        call_command("generate_exploitation_interviews", stdout=out)
+        call_command("generate_exploitation_interviews", stdout=out)
+        self.assertEqual(
+            Interview.objects.filter(employee=employee, type="annual").count(), 1
+        )
