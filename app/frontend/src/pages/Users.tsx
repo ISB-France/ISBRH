@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Search, Upload, Download, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, Plus, Search, Upload, Download, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
@@ -22,6 +22,13 @@ const roleLabel: Record<string, string> = {
   stagiaire: "Stagiaire",
   alternant: "Alternant",
 };
+
+interface UserPage {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: User[];
+}
 
 export default function Users() {
   const navigate = useNavigate();
@@ -57,9 +64,18 @@ export default function Users() {
     queryFn: () => api.get("/auth/me/").then((r) => r.data),
   });
 
-  const { data: users, isFetching, isLoading, error, refetch } = useQuery<User[]>({
+  const {
+    data,
+    isFetching,
+    isLoading,
+    error,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<UserPage>({
     queryKey: ["users", managerId, siteId, search, showInactive],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       api
         .get("/users/", {
           params: {
@@ -67,14 +83,20 @@ export default function Users() {
             site: siteId || undefined,
             search: search || undefined,
             show_all_statuts: showInactive || undefined,
+            page: pageParam,
           },
         })
         .then((r) => r.data),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => (lastPage.next ? allPages.length + 1 : undefined),
     placeholderData: keepPreviousData,
   });
 
+  const users = useMemo(() => data?.pages.flatMap((p) => p.results) ?? [], [data]);
+  const total = data?.pages[0]?.count ?? 0;
+
   const displayed = useMemo(() => {
-    if (!users || !sortField) return users;
+    if (!sortField) return users;
     return [...users].sort((a, b) => {
       let cmp = 0;
       if (sortField === "user") {
@@ -151,7 +173,7 @@ export default function Users() {
     URL.revokeObjectURL(url);
   };
 
-  if (isLoading && !users) return <LoadingScreen />;
+  if (isLoading) return <LoadingScreen />;
   if (error) return <ErrorScreen message="Impossible de charger les utilisateurs" onRetry={refetch} />;
 
   return (
@@ -273,7 +295,7 @@ export default function Users() {
               </tr>
             </thead>
             <tbody>
-              {users?.length === 0 && (
+              {users.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-sm text-muted-foreground">
                     Aucun utilisateur trouvé
@@ -362,6 +384,19 @@ export default function Users() {
             </tbody>
           </table>
           </div>
+          {users.length > 0 && (
+            <div className="flex items-center justify-between border-t border-border px-6 py-3">
+              <span className="text-xs text-muted-foreground">
+                {users.length} sur {total} utilisateur{total > 1 ? "s" : ""}
+              </span>
+              {hasNextPage && (
+                <Button variant="outline" size="sm" onClick={() => fetchNextPage()} disabled={isFetchingNextPage} className="gap-2">
+                  <ChevronDown className="h-4 w-4" />
+                  {isFetchingNextPage ? "Chargement..." : "Charger plus"}
+                </Button>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
