@@ -145,8 +145,9 @@ OBJECTIFS_SECTION_ID = "objectifs"
 def apply_default_sections(sections, interview_type=None):
     """Complete une liste de sections d'entretien avant creation :
     - pour un entretien annuel, les tableaux "Objectif à évaluer" et
-      "Objectif à définir" sont garantis présents (codés en dur), comme la
-      section Commentaire ci-dessous — indépendamment du template utilisé ;
+      "Objectif à définir" sont garantis présents (codés en dur),
+      indépendamment du template utilisé, et repositionnés juste avant la
+      section Commentaire (elle-même toujours en dernier) ;
     - toute question de type "table" sans reponse demarre avec
       DEFAULT_TABLE_ROWS lignes vides (au lieu de 0) ;
     - une section "Commentaire" (commentaire collaborateur + manager) est
@@ -161,7 +162,8 @@ def apply_default_sections(sections, interview_type=None):
                 "title": "Nouveaux objectifs pour l'année à venir",
                 "questions": [],
             }
-            sections.insert(0, objectifs_section)
+        else:
+            sections = [s for s in sections if s.get("id") != OBJECTIFS_SECTION_ID]
         questions = objectifs_section.setdefault("questions", [])
         existing_ids = {q.get("id") for q in questions}
         new_questions = []
@@ -183,6 +185,7 @@ def apply_default_sections(sections, interview_type=None):
             })
         if new_questions:
             objectifs_section["questions"] = new_questions + questions
+        sections.append(objectifs_section)
 
     for section in sections:
         for question in section.get("questions", []):
@@ -190,15 +193,19 @@ def apply_default_sections(sections, interview_type=None):
                 nb_cols = len(question.get("columns") or [{}])
                 question["answer"] = [[None] * nb_cols for _ in range(DEFAULT_TABLE_ROWS)]
 
-    if not any(s.get("id") == COMMENT_SECTION_ID for s in sections):
-        sections.append({
+    comment_section = next((s for s in sections if s.get("id") == COMMENT_SECTION_ID), None)
+    if comment_section is None:
+        comment_section = {
             "id": COMMENT_SECTION_ID,
             "title": "Commentaire",
             "questions": [
                 {"id": "commentaire_collaborateur", "label": "Commentaire du collaborateur", "type": "textarea", "answer": ""},
                 {"id": "commentaire_manager", "label": "Commentaire du manager", "type": "textarea", "answer": ""},
             ],
-        })
+        }
+    else:
+        sections = [s for s in sections if s.get("id") != COMMENT_SECTION_ID]
+    sections.append(comment_section)
     return sections
 
 

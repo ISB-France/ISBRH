@@ -435,6 +435,32 @@ class ObjectifTablesTests(TestCase):
         evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
         self.assertIsNone(evaluer)
 
+    def test_objectifs_section_always_placed_right_before_commentaires(self):
+        """Quel que soit l'ordre des sections dans le modèle, la section
+        objectifs doit se retrouver juste avant Commentaire, elle-même
+        toujours en dernier."""
+        custom_template = InterviewTemplate.objects.create(
+            name="Modèle avec commentaire en tête", type="annual",
+            sections=[
+                {
+                    "id": "commentaires", "title": "Commentaire",
+                    "questions": [{"id": "commentaire_collaborateur", "label": "Commentaire du collaborateur", "type": "textarea", "answer": ""}],
+                },
+                {"id": "objectifs", "title": "Objectifs", "questions": []},
+                {"id": "autre", "title": "Autre section", "questions": []},
+            ],
+        )
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": custom_template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        section_ids = [s["id"] for s in interview.content["sections"]]
+        self.assertEqual(section_ids, ["autre", "objectifs", "commentaires"])
+
 
 class ImportObjectifsAEvaluerTests(TestCase):
     """L'import CSV Matricule/Définition/Thème/Date de réalisation ajoute
