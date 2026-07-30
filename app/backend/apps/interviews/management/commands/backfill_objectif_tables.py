@@ -6,6 +6,7 @@ from apps.interviews.models import Interview
 from apps.interviews.templates import OBJECTIF_TABLE_COLUMNS
 
 OBJECTIFS_SECTION_ID = "objectifs"
+COMMENT_SECTION_ID = "commentaires"
 OBJECTIF_A_EVALUER_ID = "objectif_a_evaluer"
 OBJECTIF_A_DEFINIR_ID = "objectif_a_definir"
 DEFAULT_TABLE_ROWS = 5
@@ -33,9 +34,11 @@ class Command(BaseCommand):
         "'Objectif à définir' aux entretiens d'évaluation (annual) déjà "
         "créés (tous statuts), qui ne les ont pas encore — y compris ceux "
         "dont le modèle n'a pas de section 'objectifs' (une section est "
-        "alors créée). 'Objectif à évaluer' est pré-rempli avec le tableau "
-        "'Objectif à définir' de l'entretien annuel completed/signed "
-        "précédent du collaborateur, s'il existe."
+        "alors créée). Repositionne aussi la section 'objectifs' juste "
+        "avant 'commentaires' (elle-même toujours en dernier), quel que "
+        "soit l'ordre d'origine. 'Objectif à évaluer' est pré-rempli avec "
+        "le tableau 'Objectif à définir' de l'entretien annuel "
+        "completed/signed précédent du collaborateur, s'il existe."
     )
 
     def handle(self, *args, **options):
@@ -46,6 +49,8 @@ class Command(BaseCommand):
         for interview in interviews:
             content = interview.content or {}
             sections = content.setdefault("sections", [])
+            original_order = [s.get("id") for s in sections]
+
             section = next((s for s in sections if s.get("id") == OBJECTIFS_SECTION_ID), None)
             if section is None:
                 section = {
@@ -53,8 +58,8 @@ class Command(BaseCommand):
                     "title": "Nouveaux objectifs pour l'année à venir",
                     "questions": [],
                 }
-                sections.insert(0, section)
                 sections_created.append(interview.id)
+            sections = [s for s in sections if s.get("id") != OBJECTIFS_SECTION_ID]
 
             questions = section.setdefault("questions", [])
             existing_ids = {q.get("id") for q in questions}
@@ -63,11 +68,19 @@ class Command(BaseCommand):
                 new_questions.append(blank_table_question(OBJECTIF_A_EVALUER_ID, "Objectif à évaluer"))
             if OBJECTIF_A_DEFINIR_ID not in existing_ids:
                 new_questions.append(blank_table_question(OBJECTIF_A_DEFINIR_ID, "Objectif à définir"))
+            if new_questions:
+                section["questions"] = new_questions + questions
 
-            if not new_questions:
+            comment_section = next((s for s in sections if s.get("id") == COMMENT_SECTION_ID), None)
+            if comment_section is not None:
+                sections = [s for s in sections if s.get("id") != COMMENT_SECTION_ID]
+            sections.append(section)
+            if comment_section is not None:
+                sections.append(comment_section)
+            content["sections"] = sections
+
+            if [s.get("id") for s in sections] == original_order and not new_questions:
                 continue
-
-            section["questions"] = new_questions + questions
 
             evaluer_question = next(
                 (q for q in new_questions if q["id"] == OBJECTIF_A_EVALUER_ID), None

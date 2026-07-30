@@ -529,3 +529,21 @@ class BackfillObjectifTablesTests(TestCase):
         section = next(s for s in current.content["sections"] if s["id"] == "objectifs")
         evaluer = next(q for q in section["questions"] if q["id"] == "objectif_a_evaluer")
         self.assertEqual(evaluer["answer"], [["Qualité", "Réduire les défauts"]])
+
+    def test_backfill_moves_objectifs_section_right_before_commentaires(self):
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="draft", due_date=datetime.date(2026, 12, 31),
+            template=self.template,
+            content={
+                "sections": [
+                    {"id": "commentaires", "title": "Commentaire", "questions": []},
+                    copy.deepcopy(LEGACY_OBJECTIFS_SECTION),
+                    {"id": "autre", "title": "Autre", "questions": []},
+                ]
+            },
+        )
+        call_command("backfill_objectif_tables", stdout=io.StringIO())
+        interview.refresh_from_db()
+        section_ids = [s["id"] for s in interview.content["sections"]]
+        self.assertEqual(section_ids, ["autre", "objectifs", "commentaires"])
