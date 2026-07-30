@@ -1,10 +1,11 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Download, Trash2, Upload, FileUp, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
+import { Plus, Download, Trash2, Upload, FileUp, X, CalendarIcon, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Search } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import { Calendar } from "../components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "../components/ui/popover";
@@ -73,6 +74,9 @@ export default function Interviews() {
   const queryClient = useQueryClient();
   const [type, setType] = useState("");
   const [scope, setScope] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [showHistory, setShowHistory] = useState(false);
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [dateRange, setDateRange] = useState<DateRange | undefined>(todayRange());
@@ -94,6 +98,12 @@ export default function Interviews() {
       setSortDir("asc");
     }
   };
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearch(searchInput), 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchInput]);
 
   const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -137,7 +147,7 @@ export default function Interviews() {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery<InterviewPage>({
-    queryKey: ["interviews", type, scope, showHistory, dateFrom, dateTo],
+    queryKey: ["interviews", type, scope, showHistory, dateFrom, dateTo, search],
     queryFn: ({ pageParam }) =>
       api.get("/interviews/", {
         params: {
@@ -147,6 +157,7 @@ export default function Interviews() {
           ordering: showHistory ? "-updated_at" : undefined,
           due_date_after: dateFrom,
           due_date_before: dateTo,
+          search: search || undefined,
           page: pageParam,
         },
       }).then((r) => r.data),
@@ -207,6 +218,15 @@ export default function Interviews() {
       </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par nom, prénom, email, matricule..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="pl-9"
+          />
+        </div>
         {currentUser?.role === "manager" && (
           <select
             value={scope}
