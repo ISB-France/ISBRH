@@ -287,6 +287,10 @@ def _find_question(sections, question_id):
     return None
 
 
+def is_blank(row):
+    return not row or all(cell in (None, "") for cell in row)
+
+
 class ObjectifTablesTests(TestCase):
     """L'entretien d'évaluation contient un tableau "Objectif à évaluer"
     (pré-rempli avec les objectifs définis l'année précédente) et un
@@ -510,12 +514,42 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.data["created"], 1)
 
         interview.refresh_from_db()
-        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
-        self.assertEqual(len(evaluer["answer"]), 1)
-        theme, objectif, date_realisation = evaluer["answer"][0][:3]
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertEqual(len(definir_q["answer"]), 1)
+        theme, objectif, date_realisation = definir_q["answer"][0][:3]
         self.assertEqual(theme, "Qualité")
         self.assertEqual(objectif, "Réduire les défauts")
         self.assertEqual(date_realisation, "2026-12-31")
+
+    def test_import_inserts_rows_at_start_before_blank_rows_in_order(self):
+        """Les lignes importées doivent remplir les premières lignes du
+        tableau (celles vides par défaut), pas être ajoutées à la suite,
+        et conserver l'ordre du fichier CSV."""
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        interview = Interview.objects.get(pk=response.data["id"])
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertEqual(len(definir_q["answer"]), 5)
+        self.assertTrue(all(is_blank(r) for r in definir_q["answer"]))
+
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+            "00000800,Suivre une formation,Compétences,15/06/2026\n"
+        )
+        upload_response = self._upload(csv_content)
+        self.assertEqual(upload_response.status_code, 200, upload_response.data)
+        self.assertEqual(upload_response.data["created"], 2)
+
+        interview.refresh_from_db()
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertEqual(definir_q["answer"][0][:2], ["Qualité", "Réduire les défauts"])
+        self.assertEqual(definir_q["answer"][1][:2], ["Compétences", "Suivre une formation"])
+        self.assertTrue(all(is_blank(r) for r in definir_q["answer"][2:]))
 
     def test_import_creates_missing_table_instead_of_erroring(self):
         """Un entretien draft créé avant l'ajout des tableaux (ou via un
@@ -538,11 +572,12 @@ class ImportObjectifsAEvaluerTests(TestCase):
         interview.refresh_from_db()
         section_ids = [s["id"] for s in interview.content["sections"]]
         self.assertEqual(section_ids, ["libre", "objectifs", "commentaires"])
-        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
         # Le tableau nouvellement créé démarre avec 5 lignes vides (comme un
-        # entretien normal), puis la ligne importée est ajoutée à la suite.
-        self.assertEqual(len(evaluer["answer"]), 6)
-        self.assertEqual(evaluer["answer"][-1][0], "Qualité")
+        # entretien normal) ; la ligne importée est insérée en première
+        # position plutôt qu'ajoutée à la suite.
+        self.assertEqual(len(definir_q["answer"]), 6)
+        self.assertEqual(definir_q["answer"][0][0], "Qualité")
 
     def test_import_targets_in_progress_interview(self):
         interview = Interview.objects.create(
@@ -558,8 +593,8 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["created"], 1)
         interview.refresh_from_db()
-        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
-        self.assertEqual(len(evaluer["answer"]), 1)
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertEqual(len(definir_q["answer"]), 1)
 
     def test_import_picks_most_recent_interview_regardless_of_status(self):
         """Un entretien signé plus ancien ne doit pas être ciblé si un
@@ -583,8 +618,8 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["created"], 1)
         current.refresh_from_db()
-        evaluer = _find_question(current.content["sections"], "objectif_a_evaluer")
-        self.assertEqual(len(evaluer["answer"]), 1)
+        definir_q = _find_question(current.content["sections"], "objectif_a_definir")
+        self.assertEqual(len(definir_q["answer"]), 1)
 
     def test_import_targets_completed_interview_imported_from_external_history(self):
         """Cas des entretiens 2026 déjà réalisés sur une autre application
@@ -604,8 +639,8 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["created"], 1)
         interview.refresh_from_db()
-        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
-        self.assertEqual(len(evaluer["answer"]), 1)
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertEqual(len(definir_q["answer"]), 1)
 
     def test_import_targets_signed_interview_when_most_recent(self):
         interview = Interview.objects.create(
@@ -621,8 +656,8 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["created"], 1)
         interview.refresh_from_db()
-        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
-        self.assertEqual(len(evaluer["answer"]), 1)
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertEqual(len(definir_q["answer"]), 1)
 
     def test_import_cancelled_interview_is_never_targeted(self):
         Interview.objects.create(
@@ -695,8 +730,8 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(second.data["skipped"], 1)
 
         interview.refresh_from_db()
-        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
-        matching_rows = [r for r in evaluer["answer"] if r and r[0] == "Qualité"]
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        matching_rows = [r for r in definir_q["answer"] if r and r[0] == "Qualité"]
         self.assertEqual(len(matching_rows), 1)
 
     def test_reimporting_file_only_adds_missing_rows(self):
@@ -721,8 +756,8 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.data["skipped"], 1)
 
         interview.refresh_from_db()
-        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
-        themes = [r[0] for r in evaluer["answer"] if r and r[0]]
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        themes = [r[0] for r in definir_q["answer"] if r and r[0]]
         self.assertEqual(sorted(themes), ["Compétences", "Qualité"])
 
 
