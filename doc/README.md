@@ -22,7 +22,7 @@ Ce dossier contient les modèles Excel à utiliser pour les imports de masse de 
 
 | Fichier | Option d'import (UI) | Endpoint API | Usage |
 |---|---|---|---|
-| `template_objectifs_a_evaluer.xlsx` | Importer objectifs à évaluer | `POST /api/interviews/import_objectifs_a_evaluer/` | Ajoute des lignes au tableau "Objectif à évaluer" de l'entretien d'évaluation en cours (brouillon/en cours, pas terminé ni signé) d'un collaborateur : matricule, définition, thème, date de réalisation. Idempotent (ne duplique pas une ligne déjà importée) |
+| `template_objectifs_a_evaluer.xlsx` | Importer objectifs à évaluer | `POST /api/interviews/import_objectifs_a_evaluer/` | Ajoute des lignes au tableau "Objectif à définir" de l'entretien d'évaluation le plus récent (par date limite, quel que soit son statut sauf annulé) d'un collaborateur : matricule, définition, thème, date de réalisation. Insère dans les premières lignes du tableau (avant les lignes vides), idempotent (ne duplique pas une ligne déjà importée). Ces objectifs seront repris automatiquement en "Objectif à évaluer" lors de la campagne suivante |
 | `template_listes_exemple.xlsx` | Importer des listes de choix | `POST /api/answer-lists/import_csv/` | Crée ou met à jour des listes de choix réutilisables dans les questions/colonnes de type liste |
 
 ## Format général

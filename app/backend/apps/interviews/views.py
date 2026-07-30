@@ -465,12 +465,15 @@ class InterviewViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"])
     def import_objectifs_a_evaluer(self, request):
-        """Ajoute des lignes au tableau "Objectif à évaluer" de l'entretien
+        """Ajoute des lignes au tableau "Objectif à définir" de l'entretien
         d'évaluation le plus récent (par date limite), quel que soit son
         statut (sauf annulé), d'un collaborateur : Matricule, Définition,
-        Thème, Date de réalisation. Permet aussi bien de compléter
-        l'entretien en cours que d'enrichir un entretien déjà
-        terminé/signé importé depuis un historique externe."""
+        Thème, Date de réalisation. Ce sont les objectifs fixés lors de cet
+        entretien, qui seront repris automatiquement en "Objectif à
+        évaluer" lors de la campagne suivante (carry_forward_objectifs_table).
+        Permet aussi bien de compléter l'entretien en cours que d'enrichir
+        un entretien déjà terminé/signé importé depuis un historique
+        externe."""
         if request.user.role not in RH_ROLES:
             return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -485,6 +488,9 @@ class InterviewViewSet(viewsets.ModelViewSet):
         import io
 
         reader = csv.DictReader(io.StringIO(file.read().decode("utf-8-sig")))
+
+        def is_blank_row(row):
+            return not row or all(cell in (None, "") for cell in row)
 
         def row_already_imported(existing_rows, theme, objectif):
             theme_key = (theme or "").strip().lower()
@@ -522,14 +528,14 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 )
                 continue
 
-            def find_objectif_a_evaluer(iv):
+            def find_objectif_a_definir(iv):
                 for section in (iv.content or {}).get("sections", []):
                     for q in section.get("questions", []):
-                        if q.get("id") == OBJECTIF_A_EVALUER_ID:
+                        if q.get("id") == OBJECTIF_A_DEFINIR_ID:
                             return q
                 return None
 
-            question = find_objectif_a_evaluer(interview)
+            question = find_objectif_a_definir(interview)
             if question is None:
                 # L'entretien a été créé avant l'ajout des tableaux
                 # d'objectifs (ou via un template personnalisé sans section
@@ -539,7 +545,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 content = interview.content or {}
                 content["sections"] = apply_default_sections(content.get("sections", []), "annual")
                 interview.content = content
-                question = find_objectif_a_evaluer(interview)
+                question = find_objectif_a_definir(interview)
 
             try:
                 theme = get_column(row, "Thème", "Theme")
@@ -561,7 +567,10 @@ class InterviewViewSet(viewsets.ModelViewSet):
                     continue
 
                 new_row = [theme, objectif, date_realisation, "", None, "", None, ""]
-                answer.append(new_row)
+                insert_at = next(
+                    (i for i, r in enumerate(answer) if is_blank_row(r)), len(answer)
+                )
+                answer.insert(insert_at, new_row)
                 question["answer"] = answer
 
                 interview.save(update_fields=["content"])
