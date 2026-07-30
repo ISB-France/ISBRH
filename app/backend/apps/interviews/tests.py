@@ -388,6 +388,53 @@ class ObjectifTablesTests(TestCase):
         evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
         self.assertEqual(evaluer["answer"], previous_rows)
 
+    def test_custom_annual_template_without_objectifs_section_still_gets_tables(self):
+        """Un modèle annuel personnalisé qui n'a pas de section "objectifs"
+        (créé via l'UI, sections libres) doit quand même recevoir les
+        tableaux, codés en dur, comme la section Commentaire."""
+        custom_template = InterviewTemplate.objects.create(
+            name="Modèle personnalisé", type="annual",
+            sections=[{"id": "libre", "title": "Section libre", "questions": []}],
+        )
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": custom_template.id,
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        definir = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertIsNotNone(evaluer)
+        self.assertIsNotNone(definir)
+
+    def test_annual_interview_without_template_still_gets_tables(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "content": {},
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        definir = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertIsNotNone(evaluer)
+        self.assertIsNotNone(definir)
+
+    def test_professional_interview_does_not_get_objectif_tables(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "professional",
+                "due_date": "2026-12-31", "content": {},
+            }, format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        interview = Interview.objects.get(pk=response.data["id"])
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        self.assertIsNone(evaluer)
+
 
 class ImportObjectifsAEvaluerTests(TestCase):
     """L'import CSV Matricule/Définition/Thème/Date de réalisation ajoute

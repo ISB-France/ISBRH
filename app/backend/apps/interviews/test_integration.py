@@ -477,7 +477,7 @@ class BackfillObjectifTablesTests(TestCase):
             self.assertIn("objectif_a_evaluer", question_ids)
             self.assertIn("objectif_a_definir", question_ids)
 
-    def test_backfill_skips_interview_without_objectifs_section(self):
+    def test_backfill_creates_objectifs_section_when_missing(self):
         interview = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
             status="draft", due_date=datetime.date(2026, 12, 31),
@@ -486,7 +486,12 @@ class BackfillObjectifTablesTests(TestCase):
         call_command("backfill_objectif_tables", stdout=io.StringIO())
         interview.refresh_from_db()
         section_ids = [s["id"] for s in interview.content["sections"]]
-        self.assertEqual(section_ids, ["autre"])
+        self.assertIn("objectifs", section_ids)
+        self.assertIn("autre", section_ids)
+        section = next(s for s in interview.content["sections"] if s["id"] == "objectifs")
+        question_ids = {q["id"] for q in section["questions"]}
+        self.assertIn("objectif_a_evaluer", question_ids)
+        self.assertIn("objectif_a_definir", question_ids)
 
     def test_backfill_is_idempotent(self):
         Interview.objects.create(
