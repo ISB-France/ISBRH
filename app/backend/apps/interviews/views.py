@@ -19,6 +19,25 @@ from apps.users.validators import validate_csv_upload
 FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@", "\t", "\r")
 
 
+def normalize_header(value):
+    """Normalise un en-tête de colonne CSV pour une comparaison insensible
+    a la casse et aux accents (ex: "Etat" == "État" == "ETAT")."""
+    import unicodedata
+    stripped = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    return stripped.strip().lower()
+
+
+def get_column(row, *names):
+    """Recupere la valeur d'une colonne CSV en ignorant la casse et les
+    accents de l'en-tete, pour tolerer les variations d'export (Etat/État,
+    Type entretien/Type Entretien, ...)."""
+    targets = {normalize_header(name) for name in names}
+    for key, value in row.items():
+        if key and normalize_header(key) in targets:
+            return (value or "").strip()
+    return ""
+
+
 def sanitize_cell_value(value):
     """Neutralise l'injection de formule Excel : une cellule dont la valeur
     commence par un caractere declencheur de formule est prefixee par une
@@ -358,7 +377,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
         created = 0
         errors = []
         for row_num, row in enumerate(reader, start=2):
-            matricule = row.get("Matricule", "").strip()
+            matricule = get_column(row, "Matricule")
             if not matricule:
                 errors.append(f"Ligne {row_num}: matricule manquant")
                 continue
@@ -367,16 +386,16 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 errors.append(f"Ligne {row_num}: aucun collaborateur avec le matricule {matricule}")
                 continue
 
-            type_raw = row.get("Type Entretien", "").strip() or default_type
+            type_raw = get_column(row, "Type Entretien", "Type d'entretien") or default_type
             interview_type = type_map.get(type_raw.lower())
             if not interview_type:
                 errors.append(f"Ligne {row_num} ({matricule}): type d'entretien '{type_raw}' invalide")
                 continue
 
             try:
-                date_prevue = self._parse_date(row.get("Date prévue", "").strip())
-                date_realisation = self._parse_date(row.get("Date de réalisation", "").strip())
-                statut = status_map.get(row.get("État", "").strip().lower(), "completed")
+                date_prevue = self._parse_date(get_column(row, "Date prévue"))
+                date_realisation = self._parse_date(get_column(row, "Date de réalisation"))
+                statut = status_map.get(get_column(row, "État").lower(), "completed")
 
                 iv = Interview.objects.create(
                     employee=employee,
@@ -415,17 +434,10 @@ class InterviewViewSet(viewsets.ModelViewSet):
 
         reader = csv.DictReader(io.StringIO(file.read().decode("utf-8-sig")))
 
-        def get_any(row, *keys):
-            for key in keys:
-                value = row.get(key)
-                if value:
-                    return value.strip()
-            return ""
-
         created = 0
         errors = []
         for row_num, row in enumerate(reader, start=2):
-            matricule = get_any(row, "Matricule")
+            matricule = get_column(row, "Matricule")
             if not matricule:
                 errors.append(f"Ligne {row_num}: matricule manquant")
                 continue
@@ -460,9 +472,9 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 continue
 
             try:
-                theme = get_any(row, "Thème", "Theme")
-                objectif = get_any(row, "Définition", "Definition")
-                date_str = get_any(row, "Date de réalisation", "Date de realisation")
+                theme = get_column(row, "Thème", "Theme")
+                objectif = get_column(row, "Définition", "Definition")
+                date_str = get_column(row, "Date de réalisation", "Date de realisation")
                 date_realisation = date_str
                 if date_str:
                     try:
@@ -489,9 +501,10 @@ class InterviewViewSet(viewsets.ModelViewSet):
         if not value:
             return None
         from datetime import datetime
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        date_part = value.split(" ")[0].strip()
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d/%m/%y", "%d-%m-%Y", "%d.%m.%Y"):
             try:
-                return datetime.strptime(value, fmt).date()
+                return datetime.strptime(date_part, fmt).date()
             except ValueError:
                 continue
         return None

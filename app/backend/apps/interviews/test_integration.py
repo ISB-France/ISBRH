@@ -401,3 +401,16 @@ class ImportHistoriqueTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["created"], 0)
         self.assertTrue(any("type d'entretien" in e.lower() for e in response.data["errors"]))
+
+    def test_header_case_and_accent_variations_are_tolerated(self):
+        csv_content = (
+            "Matricule,Etat,Date prévue,Date de réalisation,Type entretien\n"
+            "00000500,Clôturé,10/04/2026,09/04/2026 15:24,Entretien d'évaluation\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1, response.data)
+        interview = Interview.objects.get(employee=self.employee)
+        self.assertEqual(interview.type, "annual")
+        self.assertEqual(interview.status, "signed")
+        self.assertEqual(str(interview.date_realisation), "2026-04-09")
