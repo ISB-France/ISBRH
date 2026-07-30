@@ -521,9 +521,10 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(objectif, "Réduire les défauts")
         self.assertEqual(date_realisation, "2026-12-31")
 
-    def test_import_inserts_rows_at_start_before_blank_rows_in_order(self):
-        """Les lignes importées doivent remplir les premières lignes du
-        tableau (celles vides par défaut), pas être ajoutées à la suite,
+    def test_import_fills_blank_rows_in_order_without_growing_table(self):
+        """Les lignes importées doivent remplacer les premières lignes vides
+        du tableau (celles par défaut), pas être ajoutées en plus — le
+        tableau ne doit pas grandir tant qu'il reste des lignes vides —,
         et conserver l'ordre du fichier CSV."""
         response = self.client.post(
             "/api/interviews/", {
@@ -547,9 +548,32 @@ class ImportObjectifsAEvaluerTests(TestCase):
 
         interview.refresh_from_db()
         definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        self.assertEqual(len(definir_q["answer"]), 5)
         self.assertEqual(definir_q["answer"][0][:2], ["Qualité", "Réduire les défauts"])
         self.assertEqual(definir_q["answer"][1][:2], ["Compétences", "Suivre une formation"])
         self.assertTrue(all(is_blank(r) for r in definir_q["answer"][2:]))
+
+    def test_import_grows_table_only_once_blank_rows_are_exhausted(self):
+        response = self.client.post(
+            "/api/interviews/", {
+                "employee": self.employee.id, "type": "annual",
+                "due_date": "2026-12-31", "template": self.template.id,
+            }, format="json",
+        )
+        interview = Interview.objects.get(pk=response.data["id"])
+        rows = "\n".join(f"00000800,Objectif {i},Thème {i},31/12/2026" for i in range(1, 7))
+        csv_content = f"Matricule,Définition,Thème,Date de réalisation\n{rows}\n"
+        upload_response = self._upload(csv_content)
+        self.assertEqual(upload_response.status_code, 200, upload_response.data)
+        self.assertEqual(upload_response.data["created"], 6)
+
+        interview.refresh_from_db()
+        definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
+        # 5 lignes vides disponibles + 1 ligne en plus pour la 6e (le tableau
+        # ne grandit qu'une fois les lignes vides épuisées).
+        self.assertEqual(len(definir_q["answer"]), 6)
+        for i, row in enumerate(definir_q["answer"], start=1):
+            self.assertEqual(row[:2], [f"Thème {i}", f"Objectif {i}"])
 
     def test_import_creates_missing_table_instead_of_erroring(self):
         """Un entretien draft créé avant l'ajout des tableaux (ou via un
@@ -574,9 +598,9 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(section_ids, ["libre", "objectifs", "commentaires"])
         definir_q = _find_question(interview.content["sections"], "objectif_a_definir")
         # Le tableau nouvellement créé démarre avec 5 lignes vides (comme un
-        # entretien normal) ; la ligne importée est insérée en première
-        # position plutôt qu'ajoutée à la suite.
-        self.assertEqual(len(definir_q["answer"]), 6)
+        # entretien normal) ; la ligne importée remplace la première plutôt
+        # que d'être ajoutée en plus (le tableau ne doit pas grandir).
+        self.assertEqual(len(definir_q["answer"]), 5)
         self.assertEqual(definir_q["answer"][0][0], "Qualité")
 
     def test_import_targets_in_progress_interview(self):
