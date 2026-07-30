@@ -567,10 +567,11 @@ class InterviewViewSet(viewsets.ModelViewSet):
                     continue
 
                 new_row = [theme, objectif, date_realisation, "", None, "", None, ""]
-                insert_at = next(
-                    (i for i, r in enumerate(answer) if is_blank_row(r)), len(answer)
-                )
-                answer.insert(insert_at, new_row)
+                blank_index = next((i for i, r in enumerate(answer) if is_blank_row(r)), None)
+                if blank_index is not None:
+                    answer[blank_index] = new_row
+                else:
+                    answer.append(new_row)
                 question["answer"] = answer
 
                 interview.save(update_fields=["content"])
