@@ -195,7 +195,7 @@ export default function Interviews() {
               title="Colonnes attendues : Matricule, État, Date prévue, Date de réalisation, Type Entretien"
             >
               <FileUp className="h-4 w-4" />
-              Importer historique
+              Importer historique d'entretiens
               <input ref={historiqueFileRef} type="file" accept=".csv" onChange={handleImportHistorique} hidden />
             </label>
             <Button onClick={() => navigate("/interviews/new")} className="gap-2">

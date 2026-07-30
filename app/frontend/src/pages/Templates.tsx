@@ -125,7 +125,7 @@ export default function Templates() {
             <>
               <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
                 <Upload className="h-4 w-4" />
-                Importer une liste
+                Importer des listes de choix
                 <input ref={listsFileRef} type="file" accept=".csv" onChange={handleImportListsCsv} hidden />
               </label>
               <Button onClick={() => setEditingList({ id: null, name: "", itemsText: "" })} className="gap-2">
