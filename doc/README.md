@@ -6,7 +6,7 @@ Ce dossier contient les modèles Excel à utiliser pour les imports de masse de 
 
 | Fichier | Option d'import (UI) | Endpoint API | Usage |
 |---|---|---|---|
-| `template_utilisateurs_kostango.xlsx` | Import utilisateurs (Kostango) | `POST /api/users/import_kostango/` | Import/synchronisation des utilisateurs depuis un export Kostango (crée ou met à jour les comptes : email, poste, site, contrat, valideur N+1, etc.) |
+| `template_utilisateurs.xlsx` | Import utilisateurs | `POST /api/users/import_kostango/` | Import/synchronisation des utilisateurs depuis un export Kostango (crée ou met à jour les comptes : email, poste, site, contrat, valideur N+1, etc.) |
 | `template_evolution_professionnelle.xlsx` | Import évolution professionnelle | `POST /api/users/import_collaborateurs/` | Met à jour l'état COURANT des fiches collaborateurs à partir du matricule (nom, prénom, dates, statut, niveau, coefficient, poste, fonctionnement) |
 | `template_formations.xlsx` | Import formations | `POST /api/users/import_formations/` | Ajoute des formations suivies à l'historique d'un collaborateur, identifié par matricule |
 | `template_augmentations.xlsx` | Import augmentations | `POST /api/users/import_augmentations/` | Ajoute des augmentations salariales à l'historique d'un collaborateur, identifié par matricule |
