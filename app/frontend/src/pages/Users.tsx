@@ -187,11 +187,11 @@ export default function Users() {
               onChange={(e) => setImportType(e.target.value as "users" | "formations" | "augmentations" | "collaborateurs" | "evolutions")}
               className="h-10 rounded-md border border-border bg-white px-3 text-sm"
             >
-              <option value="users">Import utilisateurs</option>
+              <option value="users">Import utilisateurs (Kostango)</option>
               <option value="collaborateurs">Import évolution professionnelle</option>
               <option value="formations">Import formations</option>
               <option value="augmentations">Import augmentations</option>
-              <option value="evolutions">Import évolutions (historique)</option>
+              <option value="evolutions">Import évolutions historique</option>
             </select>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary">
               <Upload className="h-4 w-4" />
