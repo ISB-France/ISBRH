@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Trash2, Download, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Trash2, Download, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
 import AppLayout from "../components/AppLayout";
 import LoadingScreen from "../components/LoadingScreen";
@@ -26,6 +27,7 @@ export default function Campaigns() {
   const queryClient = useQueryClient();
   const [showHistory, setShowHistory] = useState(false);
   const [typeFilter, setTypeFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [sortField, setSortField] = useState<string | null>(null);
@@ -61,6 +63,7 @@ export default function Campaigns() {
   const filtered = campaigns?.filter((c) => {
     if (showHistory ? c.due_date >= today : c.due_date < today) return false;
     if (typeFilter && templateTypeMap.get(c.template ?? -1) !== typeFilter) return false;
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -116,6 +119,15 @@ export default function Campaigns() {
       </div>
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Rechercher par nom de campagne..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}

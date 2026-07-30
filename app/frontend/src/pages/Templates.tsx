@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus, Copy, Trash2, Upload, FileUp } from "lucide-react";
+import { Plus, Copy, Trash2, Upload, FileUp, Search } from "lucide-react";
 import { Toast, useToast } from "../components/Toast";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
@@ -26,6 +26,7 @@ export default function Templates() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [showLists, setShowLists] = useState(false);
   const [editingList, setEditingList] = useState<{ id: number | null; name: string; itemsText: string } | null>(null);
@@ -46,7 +47,12 @@ export default function Templates() {
     enabled: showLists,
   });
 
-  const filtered = templates?.filter((t) => !typeFilter || t.type === typeFilter);
+  const filtered = templates?.filter(
+    (t) => (!typeFilter || t.type === typeFilter) && (!search || t.name.toLowerCase().includes(search.toLowerCase()))
+  );
+  const filteredLists = answerLists?.filter(
+    (l) => !search || l.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   const handleDuplicate = async (t: InterviewTemplate) => {
     await api.post("/interview-templates/", {
@@ -153,6 +159,15 @@ export default function Templates() {
       </div>
 
       <div className="mb-4 flex items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder={showLists ? "Rechercher une liste..." : "Rechercher un modèle..."}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
         {!showLists && (
           <select
             value={typeFilter}
@@ -286,14 +301,14 @@ export default function Templates() {
               </tr>
             </thead>
             <tbody>
-              {answerLists?.length === 0 && (
+              {filteredLists?.length === 0 && (
                 <tr>
                   <td colSpan={3} className="px-6 py-8 text-center text-sm text-muted-foreground">
                     Aucune liste. Créez-en une ou importez un CSV.
                   </td>
                 </tr>
               )}
-              {answerLists?.map((l) => (
+              {filteredLists?.map((l) => (
                 <tr key={l.id} className="border-b border-border last:border-0">
                   <td className="px-6 py-3 text-sm font-medium">{l.name}</td>
                   <td className="px-6 py-3 text-sm text-muted-foreground max-w-md truncate">
