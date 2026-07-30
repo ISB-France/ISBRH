@@ -1177,3 +1177,39 @@ class DefaultCommentSectionAndTableRowsTests(TestCase):
         self.template.refresh_from_db()
         table_q = self.template.sections[0]["questions"][0]
         self.assertEqual(table_q["answer"], [])
+
+
+class InterviewSearchByMatriculeTests(TestCase):
+    """La recherche (?search=) sur /api/interviews/ doit aussi matcher le
+    matricule du collaborateur, pas seulement nom/prénom/email."""
+
+    def test_search_by_matricule_returns_matching_interview(self):
+        rh = User.objects.create_user(
+            username="rh1", email="rh1@example.com", password="pass1234", role="rh"
+        )
+        manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=manager, matricule="03081592",
+        )
+        other_employee = User.objects.create_user(
+            username="emp2", email="emp2@example.com", password="pass1234",
+            role="employee", manager=manager, matricule="00000999",
+        )
+        interview = Interview.objects.create(
+            employee=employee, manager=manager, type="annual",
+            due_date=datetime.date(2026, 12, 31),
+        )
+        Interview.objects.create(
+            employee=other_employee, manager=manager, type="annual",
+            due_date=datetime.date(2026, 12, 31),
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=rh)
+        response = client.get("/api/interviews/", {"search": "03081592"})
+        self.assertEqual(response.status_code, 200)
+        returned_ids = {iv["id"] for iv in response.data["results"]}
+        self.assertEqual(returned_ids, {interview.id})

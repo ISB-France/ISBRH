@@ -258,7 +258,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
     serializer_class = InterviewSerializer
     permission_classes = [permissions.IsAuthenticated, InterviewPermission]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["employee__first_name", "employee__last_name", "employee__email"]
+    search_fields = ["employee__first_name", "employee__last_name", "employee__email", "employee__matricule"]
     ordering_fields = ["due_date", "created_at", "updated_at", "status"]
     ordering = ["-due_date"]
     pagination_class = InterviewPagination
