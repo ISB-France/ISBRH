@@ -464,8 +464,9 @@ class ObjectifTablesTests(TestCase):
 
 class ImportObjectifsAEvaluerTests(TestCase):
     """L'import CSV Matricule/Définition/Thème/Date de réalisation ajoute
-    des lignes au tableau "Objectif à évaluer" du dernier entretien
-    d'évaluation terminé (completed) ou signé (signed) du collaborateur."""
+    des lignes au tableau "Objectif à évaluer" de l'entretien d'évaluation
+    en cours (draft/in_progress) du collaborateur — celui qu'on est en
+    train de remplir, pas un entretien déjà terminé/signé."""
 
     def setUp(self):
         self.rh_user = User.objects.create_user(
@@ -492,10 +493,10 @@ class ImportObjectifsAEvaluerTests(TestCase):
             "/api/interviews/import_objectifs_a_evaluer/", {"file": upload}, format="multipart"
         )
 
-    def test_import_appends_row_to_completed_interview_table(self):
+    def test_import_appends_row_to_draft_interview_table(self):
         interview = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="completed", due_date=datetime.date(2026, 12, 31),
+            status="draft", due_date=datetime.date(2026, 12, 31),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         csv_content = (
@@ -515,12 +516,12 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(date_realisation, "2026-12-31")
 
     def test_import_creates_missing_table_instead_of_erroring(self):
-        """Un entretien completed créé avant l'ajout des tableaux (ou via un
+        """Un entretien draft créé avant l'ajout des tableaux (ou via un
         template personnalisé sans section objectifs) ne doit pas faire
         échouer l'import : le tableau est ajouté directement."""
         interview = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="completed", due_date=datetime.date(2026, 12, 31),
+            status="draft", due_date=datetime.date(2026, 12, 31),
             template=self.template,
             content={"sections": [{"id": "libre", "title": "Section libre", "questions": []}]},
         )
@@ -541,10 +542,10 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(len(evaluer["answer"]), 6)
         self.assertEqual(evaluer["answer"][-1][0], "Qualité")
 
-    def test_import_targets_signed_interview(self):
+    def test_import_targets_in_progress_interview(self):
         interview = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="signed", due_date=datetime.date(2026, 12, 31),
+            status="in_progress", due_date=datetime.date(2026, 12, 31),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         csv_content = (
@@ -558,15 +559,15 @@ class ImportObjectifsAEvaluerTests(TestCase):
         evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
         self.assertEqual(len(evaluer["answer"]), 1)
 
-    def test_import_picks_most_recent_completed_or_signed_interview(self):
+    def test_import_picks_most_recent_draft_or_in_progress_interview(self):
         Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="completed", due_date=datetime.date(2024, 12, 31),
+            status="draft", due_date=datetime.date(2024, 12, 31),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         recent = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="signed", due_date=datetime.date(2026, 12, 31),
+            status="in_progress", due_date=datetime.date(2026, 12, 31),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         csv_content = (
@@ -579,10 +580,34 @@ class ImportObjectifsAEvaluerTests(TestCase):
         evaluer = _find_question(recent.content["sections"], "objectif_a_evaluer")
         self.assertEqual(len(evaluer["answer"]), 1)
 
+    def test_import_ignores_completed_interview_even_if_more_recent(self):
+        """Un entretien signé/terminé plus récent ne doit pas être ciblé :
+        seul l'entretien en cours compte, même s'il est plus ancien."""
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="signed", due_date=datetime.date(2026, 1, 13),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        current = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="draft", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+        current.refresh_from_db()
+        evaluer = _find_question(current.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(len(evaluer["answer"]), 1)
+
     def test_import_accepts_unaccented_headers(self):
         Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="completed", due_date=datetime.date(2026, 12, 31),
+            status="draft", due_date=datetime.date(2026, 12, 31),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         csv_content = (
@@ -593,7 +618,7 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["created"], 1)
 
-    def test_import_reports_error_when_no_completed_or_signed_interview(self):
+    def test_import_reports_error_when_no_current_interview(self):
         csv_content = (
             "Matricule,Définition,Thème,Date de réalisation\n"
             "00000800,Réduire les défauts,Qualité,31/12/2026\n"
@@ -613,41 +638,13 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.data["created"], 0)
         self.assertTrue(any("aucun collaborateur" in e.lower() for e in response.data["errors"]))
 
-    def test_import_draft_interview_is_not_targeted(self):
-        Interview.objects.create(
-            employee=self.employee, manager=self.manager, type="annual",
-            status="draft", due_date=datetime.date(2026, 12, 31),
-            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
-        )
-        csv_content = (
-            "Matricule,Définition,Thème,Date de réalisation\n"
-            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
-        )
-        response = self._upload(csv_content)
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data["created"], 0)
-
-    def test_import_cancelled_interview_is_not_targeted(self):
-        Interview.objects.create(
-            employee=self.employee, manager=self.manager, type="annual",
-            status="cancelled", due_date=datetime.date(2026, 12, 31),
-            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
-        )
-        csv_content = (
-            "Matricule,Définition,Thème,Date de réalisation\n"
-            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
-        )
-        response = self._upload(csv_content)
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data["created"], 0)
-
     def test_reimporting_same_row_does_not_duplicate(self):
         """Ré-importer le même fichier ne doit pas dupliquer les lignes
         déjà présentes (même thème + même définition) : seules les lignes
         manquantes doivent être ajoutées."""
         interview = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="completed", due_date=datetime.date(2026, 12, 31),
+            status="draft", due_date=datetime.date(2026, 12, 31),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         csv_content = (
@@ -673,7 +670,7 @@ class ImportObjectifsAEvaluerTests(TestCase):
         nouvelle ligne ne doit ajouter que la nouvelle."""
         interview = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="completed", due_date=datetime.date(2026, 12, 31),
+            status="draft", due_date=datetime.date(2026, 12, 31),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         self._upload(
