@@ -111,10 +111,15 @@ def carry_forward_objectifs_table(employee, interview_type, sections):
     if not previous:
         return sections
 
+    def table_has_content(rows):
+        if not rows:
+            return False
+        return any(cell not in (None, "") for row in rows for cell in row)
+
     previous_rows = None
     for section in previous.content.get("sections", []):
         for question in section.get("questions", []):
-            if question.get("id") == OBJECTIF_A_DEFINIR_ID:
+            if question.get("id") == OBJECTIF_A_DEFINIR_ID and table_has_content(question.get("answer")):
                 previous_rows = question.get("answer")
                 break
         if previous_rows:

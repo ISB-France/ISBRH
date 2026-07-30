@@ -3,6 +3,7 @@ l'application (audit point 4) : creation utilisateur -> campagne -> generation
 d'entretiens, isolation employee/manager, import CSV avec lignes invalides,
 generation PDF, notifications."""
 
+import copy
 import datetime
 import io
 
@@ -12,6 +13,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.interviews.models import Campaign, Interview, InterviewTemplate
+from apps.interviews.templates import ANNUAL_TEMPLATE
 from apps.users.models import Notification, Site, User
 
 
@@ -414,3 +416,111 @@ class ImportHistoriqueTests(TestCase):
         self.assertEqual(interview.type, "annual")
         self.assertEqual(interview.status, "signed")
         self.assertEqual(str(interview.date_realisation), "2026-04-09")
+
+
+LEGACY_OBJECTIFS_SECTION = {
+    "id": "objectifs",
+    "title": "Nouveaux objectifs pour l'année à venir",
+    "questions": [
+        {"id": "objectifs_metier", "label": "Objectifs métier", "type": "textarea", "answer": ""},
+    ],
+}
+
+
+class BackfillObjectifTablesTests(TestCase):
+    """La commande backfill_objectif_tables doit ajouter retroactivement
+    les tableaux 'Objectif à évaluer' / 'Objectif à définir' aux entretiens
+    annuels déjà créés (quel que soit leur statut, y compris brouillon),
+    tant qu'ils ont une section 'objectifs'."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            username="mgr1", email="mgr1@example.com", password="pass1234", role="manager"
+        )
+        self.employee = User.objects.create_user(
+            username="emp1", email="emp1@example.com", password="pass1234",
+            role="employee", manager=self.manager,
+        )
+        self.template = InterviewTemplate.objects.create(
+            name="Annuel", type="annual", sections=copy.deepcopy(ANNUAL_TEMPLATE["sections"]),
+        )
+
+    def _legacy_content(self):
+        return {"sections": [copy.deepcopy(LEGACY_OBJECTIFS_SECTION)]}
+
+    def test_backfill_adds_tables_to_draft_interview(self):
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="draft", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content=self._legacy_content(),
+        )
+        out = io.StringIO()
+        call_command("backfill_objectif_tables", stdout=out)
+
+        interview.refresh_from_db()
+        section = next(s for s in interview.content["sections"] if s["id"] == "objectifs")
+        question_ids = {q["id"] for q in section["questions"]}
+        self.assertIn("objectif_a_evaluer", question_ids)
+        self.assertIn("objectif_a_definir", question_ids)
+
+    def test_backfill_adds_tables_to_completed_and_signed_interviews_too(self):
+        for status in ("completed", "signed", "in_progress"):
+            Interview.objects.create(
+                employee=self.employee, manager=self.manager, type="annual",
+                status=status, due_date=datetime.date(2026, 1, 1),
+                template=self.template, content=self._legacy_content(),
+            )
+        call_command("backfill_objectif_tables", stdout=io.StringIO())
+        for interview in Interview.objects.filter(employee=self.employee):
+            section = next(s for s in interview.content["sections"] if s["id"] == "objectifs")
+            question_ids = {q["id"] for q in section["questions"]}
+            self.assertIn("objectif_a_evaluer", question_ids)
+            self.assertIn("objectif_a_definir", question_ids)
+
+    def test_backfill_skips_interview_without_objectifs_section(self):
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="draft", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": [{"id": "autre", "title": "Autre", "questions": []}]},
+        )
+        call_command("backfill_objectif_tables", stdout=io.StringIO())
+        interview.refresh_from_db()
+        section_ids = [s["id"] for s in interview.content["sections"]]
+        self.assertEqual(section_ids, ["autre"])
+
+    def test_backfill_is_idempotent(self):
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="draft", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content=self._legacy_content(),
+        )
+        call_command("backfill_objectif_tables", stdout=io.StringIO())
+        out = io.StringIO()
+        call_command("backfill_objectif_tables", stdout=out)
+        self.assertIn("0 entretien", out.getvalue())
+
+    def test_backfill_prefills_objectif_a_evaluer_from_previous_completed_definir(self):
+        previous = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2025, 12, 31),
+            template=self.template, content=self._legacy_content(),
+        )
+        prev_content = previous.content
+        prev_content["sections"][0]["questions"].append({
+            "id": "objectif_a_definir", "label": "Objectif à définir", "type": "table",
+            "columns": [], "answer": [["Qualité", "Réduire les défauts"]],
+        })
+        previous.content = prev_content
+        previous.save()
+
+        current = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="draft", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content=self._legacy_content(),
+        )
+        call_command("backfill_objectif_tables", stdout=io.StringIO())
+
+        current.refresh_from_db()
+        section = next(s for s in current.content["sections"] if s["id"] == "objectifs")
+        evaluer = next(q for q in section["questions"] if q["id"] == "objectif_a_evaluer")
+        self.assertEqual(evaluer["answer"], [["Qualité", "Réduire les défauts"]])
