@@ -465,8 +465,10 @@ class ObjectifTablesTests(TestCase):
 class ImportObjectifsAEvaluerTests(TestCase):
     """L'import CSV Matricule/Définition/Thème/Date de réalisation ajoute
     des lignes au tableau "Objectif à évaluer" de l'entretien d'évaluation
-    en cours (draft/in_progress) du collaborateur — celui qu'on est en
-    train de remplir, pas un entretien déjà terminé/signé."""
+    le plus récent (par date limite) du collaborateur, quel que soit son
+    statut sauf annulé — que ce soit l'entretien en cours de remplissage
+    ou un entretien déjà terminé/signé importé depuis un historique
+    externe (ex: campagne 2026 faite sur une autre application)."""
 
     def setUp(self):
         self.rh_user = User.objects.create_user(
@@ -559,30 +561,10 @@ class ImportObjectifsAEvaluerTests(TestCase):
         evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
         self.assertEqual(len(evaluer["answer"]), 1)
 
-    def test_import_picks_most_recent_draft_or_in_progress_interview(self):
-        Interview.objects.create(
-            employee=self.employee, manager=self.manager, type="annual",
-            status="draft", due_date=datetime.date(2024, 12, 31),
-            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
-        )
-        recent = Interview.objects.create(
-            employee=self.employee, manager=self.manager, type="annual",
-            status="in_progress", due_date=datetime.date(2026, 12, 31),
-            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
-        )
-        csv_content = (
-            "Matricule,Définition,Thème,Date de réalisation\n"
-            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
-        )
-        response = self._upload(csv_content)
-        self.assertEqual(response.status_code, 200, response.data)
-        recent.refresh_from_db()
-        evaluer = _find_question(recent.content["sections"], "objectif_a_evaluer")
-        self.assertEqual(len(evaluer["answer"]), 1)
-
-    def test_import_ignores_completed_interview_even_if_more_recent(self):
-        """Un entretien signé/terminé plus récent ne doit pas être ciblé :
-        seul l'entretien en cours compte, même s'il est plus ancien."""
+    def test_import_picks_most_recent_interview_regardless_of_status(self):
+        """Un entretien signé plus ancien ne doit pas être ciblé si un
+        brouillon plus récent existe (cas réel : historique signé de
+        janvier vs brouillon de la campagne en cours)."""
         Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
             status="signed", due_date=datetime.date(2026, 1, 13),
@@ -590,7 +572,7 @@ class ImportObjectifsAEvaluerTests(TestCase):
         )
         current = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="draft", due_date=datetime.date(2025, 12, 31),
+            status="draft", due_date=datetime.date(2026, 7, 30),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         csv_content = (
@@ -603,6 +585,58 @@ class ImportObjectifsAEvaluerTests(TestCase):
         current.refresh_from_db()
         evaluer = _find_question(current.content["sections"], "objectif_a_evaluer")
         self.assertEqual(len(evaluer["answer"]), 1)
+
+    def test_import_targets_completed_interview_imported_from_external_history(self):
+        """Cas des entretiens 2026 déjà réalisés sur une autre application
+        et importés dans ISBoard via l'import historique (completed/signed,
+        aucun autre entretien plus récent) : l'import doit quand même
+        alimenter leur tableau Objectif à évaluer."""
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+        interview.refresh_from_db()
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(len(evaluer["answer"]), 1)
+
+    def test_import_targets_signed_interview_when_most_recent(self):
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="signed", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+        interview.refresh_from_db()
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(len(evaluer["answer"]), 1)
+
+    def test_import_cancelled_interview_is_never_targeted(self):
+        Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="cancelled", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 0)
 
     def test_import_accepts_unaccented_headers(self):
         Interview.objects.create(
