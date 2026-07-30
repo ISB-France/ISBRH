@@ -466,9 +466,11 @@ class InterviewViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["post"])
     def import_objectifs_a_evaluer(self, request):
         """Ajoute des lignes au tableau "Objectif à évaluer" de l'entretien
-        d'évaluation en cours (brouillon ou en cours, pas encore terminé ni
-        signé) d'un collaborateur : Matricule, Définition, Thème, Date de
-        réalisation."""
+        d'évaluation le plus récent (par date limite), quel que soit son
+        statut (sauf annulé), d'un collaborateur : Matricule, Définition,
+        Thème, Date de réalisation. Permet aussi bien de compléter
+        l'entretien en cours que d'enrichir un entretien déjà
+        terminé/signé importé depuis un historique externe."""
         if request.user.role not in RH_ROLES:
             return Response({"error": "Accès refusé"}, status=status.HTTP_403_FORBIDDEN)
 
@@ -509,13 +511,14 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 continue
 
             interview = (
-                Interview.objects.filter(employee=employee, type="annual", status__in=("draft", "in_progress"))
+                Interview.objects.filter(employee=employee, type="annual")
+                .exclude(status="cancelled")
                 .order_by("-due_date")
                 .first()
             )
             if not interview:
                 errors.append(
-                    f"Ligne {row_num} ({matricule}): aucun entretien d'évaluation en cours pour ce collaborateur"
+                    f"Ligne {row_num} ({matricule}): aucun entretien d'évaluation pour ce collaborateur"
                 )
                 continue
 
