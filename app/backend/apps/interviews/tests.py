@@ -392,7 +392,7 @@ class ObjectifTablesTests(TestCase):
 class ImportObjectifsAEvaluerTests(TestCase):
     """L'import CSV Matricule/Définition/Thème/Date de réalisation ajoute
     des lignes au tableau "Objectif à évaluer" de l'entretien d'évaluation
-    en cours du collaborateur."""
+    le plus récent (non signé, non annulé) du collaborateur."""
 
     def setUp(self):
         self.rh_user = User.objects.create_user(
@@ -475,10 +475,27 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.data["created"], 0)
         self.assertTrue(any("aucun collaborateur" in e.lower() for e in response.data["errors"]))
 
-    def test_import_completed_interview_is_not_targeted(self):
+    def test_import_targets_completed_interview(self):
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+        interview.refresh_from_db()
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        self.assertEqual(len(evaluer["answer"]), 1)
+
+    def test_import_signed_interview_is_not_targeted(self):
         Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
-            status="completed", due_date=datetime.date(2025, 12, 31),
+            status="signed", due_date=datetime.date(2025, 12, 31),
             template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
         )
         csv_content = (
