@@ -194,6 +194,10 @@ export default function InterviewDetail() {
   const prevAnswers = new Map<string, string | number | boolean | (string | number | null)[][] | ObjectifBilanAnswer | null>();
   for (const section of interview.previous_content || []) {
     for (const q of section.questions) {
+      // "Objectif à définir" démarre toujours vierge : la réponse
+      // précédente n'a pas de sens ici (ce ne sont pas les mêmes objectifs
+      // d'une année sur l'autre) et ne doit jamais s'afficher en indice.
+      if (q.id === "objectif_a_definir") continue;
       if (q.answer !== undefined) prevAnswers.set(q.id, q.answer);
     }
   }
