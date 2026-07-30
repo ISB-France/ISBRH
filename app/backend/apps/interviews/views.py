@@ -508,19 +508,24 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 )
                 continue
 
-            question = None
-            for section in (interview.content or {}).get("sections", []):
-                for q in section.get("questions", []):
-                    if q.get("id") == OBJECTIF_A_EVALUER_ID:
-                        question = q
-                        break
-                if question:
-                    break
+            def find_objectif_a_evaluer(iv):
+                for section in (iv.content or {}).get("sections", []):
+                    for q in section.get("questions", []):
+                        if q.get("id") == OBJECTIF_A_EVALUER_ID:
+                            return q
+                return None
+
+            question = find_objectif_a_evaluer(interview)
             if question is None:
-                errors.append(
-                    f"Ligne {row_num} ({matricule}): tableau 'Objectif à évaluer' introuvable sur l'entretien"
-                )
-                continue
+                # L'entretien a été créé avant l'ajout des tableaux
+                # d'objectifs (ou via un template personnalisé sans section
+                # "objectifs") : on les ajoute directement plutôt que de
+                # rejeter la ligne, pour que l'import aille toujours dans
+                # le tableau de l'entretien.
+                content = interview.content or {}
+                content["sections"] = apply_default_sections(content.get("sections", []), "annual")
+                interview.content = content
+                question = find_objectif_a_evaluer(interview)
 
             try:
                 theme = get_column(row, "Thème", "Theme")

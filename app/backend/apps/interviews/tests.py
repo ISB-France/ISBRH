@@ -514,6 +514,33 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(objectif, "Réduire les défauts")
         self.assertEqual(date_realisation, "2026-12-31")
 
+    def test_import_creates_missing_table_instead_of_erroring(self):
+        """Un entretien completed créé avant l'ajout des tableaux (ou via un
+        template personnalisé sans section objectifs) ne doit pas faire
+        échouer l'import : le tableau est ajouté directement."""
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2026, 12, 31),
+            template=self.template,
+            content={"sections": [{"id": "libre", "title": "Section libre", "questions": []}]},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(csv_content)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1, response.data)
+
+        interview.refresh_from_db()
+        section_ids = [s["id"] for s in interview.content["sections"]]
+        self.assertEqual(section_ids, ["libre", "objectifs", "commentaires"])
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        # Le tableau nouvellement créé démarre avec 5 lignes vides (comme un
+        # entretien normal), puis la ligne importée est ajoutée à la suite.
+        self.assertEqual(len(evaluer["answer"]), 6)
+        self.assertEqual(evaluer["answer"][-1][0], "Qualité")
+
     def test_import_targets_signed_interview(self):
         interview = Interview.objects.create(
             employee=self.employee, manager=self.manager, type="annual",
