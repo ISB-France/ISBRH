@@ -13,6 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import AnswerList, Campaign, Interview, InterviewTemplate
 from .serializers import AnswerListSerializer, CampaignSerializer, InterviewSerializer, InterviewTemplateSerializer
+from .templates import OBJECTIF_TABLE_COLUMNS
 from apps.users.models import RH_ROLES, User
 from apps.users.validators import validate_csv_upload
 
@@ -138,15 +139,51 @@ def carry_forward_objectifs_table(employee, interview_type, sections):
 DEFAULT_TABLE_ROWS = 5
 
 COMMENT_SECTION_ID = "commentaires"
+OBJECTIFS_SECTION_ID = "objectifs"
 
 
-def apply_default_sections(sections):
+def apply_default_sections(sections, interview_type=None):
     """Complete une liste de sections d'entretien avant creation :
+    - pour un entretien annuel, les tableaux "Objectif à évaluer" et
+      "Objectif à définir" sont garantis présents (codés en dur), comme la
+      section Commentaire ci-dessous — indépendamment du template utilisé ;
     - toute question de type "table" sans reponse demarre avec
       DEFAULT_TABLE_ROWS lignes vides (au lieu de 0) ;
     - une section "Commentaire" (commentaire collaborateur + manager) est
       ajoutee par defaut si elle n'est pas deja presente."""
     sections = copy.deepcopy(list(sections))
+
+    if interview_type == "annual":
+        objectifs_section = next((s for s in sections if s.get("id") == OBJECTIFS_SECTION_ID), None)
+        if objectifs_section is None:
+            objectifs_section = {
+                "id": OBJECTIFS_SECTION_ID,
+                "title": "Nouveaux objectifs pour l'année à venir",
+                "questions": [],
+            }
+            sections.insert(0, objectifs_section)
+        questions = objectifs_section.setdefault("questions", [])
+        existing_ids = {q.get("id") for q in questions}
+        new_questions = []
+        if OBJECTIF_A_EVALUER_ID not in existing_ids:
+            new_questions.append({
+                "id": OBJECTIF_A_EVALUER_ID,
+                "label": "Objectif à évaluer",
+                "type": "table",
+                "columns": copy.deepcopy(OBJECTIF_TABLE_COLUMNS),
+                "answer": [],
+            })
+        if OBJECTIF_A_DEFINIR_ID not in existing_ids:
+            new_questions.append({
+                "id": OBJECTIF_A_DEFINIR_ID,
+                "label": "Objectif à définir",
+                "type": "table",
+                "columns": copy.deepcopy(OBJECTIF_TABLE_COLUMNS),
+                "answer": [],
+            })
+        if new_questions:
+            objectifs_section["questions"] = new_questions + questions
+
     for section in sections:
         for question in section.get("questions", []):
             if question.get("type") == "table" and not question.get("answer"):
@@ -294,6 +331,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
                 "coefficient": employee.coefficient,
                 "salaire_brut": str(employee.salaire_brut) if employee.salaire_brut else None,
             }
+        content["sections"] = apply_default_sections(content.get("sections", []), interview_type)
         if employee and interview_type:
             bilan_sections = build_previous_year_bilan_sections(employee, interview_type)
             if bilan_sections:
@@ -301,7 +339,6 @@ class InterviewViewSet(viewsets.ModelViewSet):
             content["sections"] = carry_forward_objectifs_table(
                 employee, interview_type, content.get("sections", [])
             )
-        content["sections"] = apply_default_sections(content.get("sections", []))
         serializer.validated_data["content"] = content
         serializer.save(manager=employee.manager if employee else None)
 
@@ -870,12 +907,11 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
         created = 0
         for user in qs:
-            sections = list(template.sections)
+            sections = apply_default_sections(list(template.sections), template.type)
             bilan_sections = build_previous_year_bilan_sections(user, template.type)
             if bilan_sections:
                 sections = bilan_sections + sections
             sections = carry_forward_objectifs_table(user, template.type, sections)
-            sections = apply_default_sections(sections)
             _, was_created = Interview.objects.get_or_create(
                 campaign=campaign,
                 employee=user,

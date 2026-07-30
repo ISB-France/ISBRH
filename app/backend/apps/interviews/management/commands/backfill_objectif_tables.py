@@ -31,24 +31,30 @@ class Command(BaseCommand):
     help = (
         "Ajoute retroactivement les tableaux 'Objectif à évaluer' et "
         "'Objectif à définir' aux entretiens d'évaluation (annual) déjà "
-        "créés (tous statuts), qui ne les ont pas encore. 'Objectif à "
-        "évaluer' est pré-rempli avec le tableau 'Objectif à définir' de "
-        "l'entretien annuel completed/signed précédent du collaborateur, "
-        "s'il existe."
+        "créés (tous statuts), qui ne les ont pas encore — y compris ceux "
+        "dont le modèle n'a pas de section 'objectifs' (une section est "
+        "alors créée). 'Objectif à évaluer' est pré-rempli avec le tableau "
+        "'Objectif à définir' de l'entretien annuel completed/signed "
+        "précédent du collaborateur, s'il existe."
     )
 
     def handle(self, *args, **options):
         updated = 0
-        skipped_no_section = []
+        sections_created = []
 
         interviews = Interview.objects.filter(type="annual").select_related("employee").order_by("due_date")
         for interview in interviews:
             content = interview.content or {}
-            sections = content.get("sections", [])
+            sections = content.setdefault("sections", [])
             section = next((s for s in sections if s.get("id") == OBJECTIFS_SECTION_ID), None)
             if section is None:
-                skipped_no_section.append(interview.id)
-                continue
+                section = {
+                    "id": OBJECTIFS_SECTION_ID,
+                    "title": "Nouveaux objectifs pour l'année à venir",
+                    "questions": [],
+                }
+                sections.insert(0, section)
+                sections_created.append(interview.id)
 
             questions = section.setdefault("questions", [])
             existing_ids = {q.get("id") for q in questions}
@@ -91,8 +97,8 @@ class Command(BaseCommand):
             updated += 1
 
         self.stdout.write(f"{updated} entretien(s) mis à jour")
-        if skipped_no_section:
+        if sections_created:
             self.stdout.write(
-                f"{len(skipped_no_section)} entretien(s) ignoré(s) (pas de section 'objectifs') : "
-                f"{skipped_no_section}"
+                f"{len(sections_created)} entretien(s) ont reçu une nouvelle section 'objectifs' "
+                f"(modèle sans section correspondante) : {sections_created}"
             )
