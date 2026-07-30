@@ -107,7 +107,7 @@ export default function Templates() {
     const form = new FormData();
     form.append("file", file);
     const res = await api.post("/interviews/import_objectifs_a_evaluer/", form);
-    const msg = `${res.data.created} objectif(s) importé(s)${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
+    const msg = `${res.data.created} objectif(s) importé(s)${res.data.skipped ? `, ${res.data.skipped} déjà présent(s) ignoré(s)` : ""}${res.data.errors?.length ? " — " + res.data.errors.slice(0, 3).join(", ") + (res.data.errors.length > 3 ? "..." : "") : ""}`;
     show(msg, res.data.errors?.length ? "error" : "success");
     e.target.value = "";
   };
