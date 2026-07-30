@@ -137,7 +137,7 @@ export default function Templates() {
             <>
               <label
                 className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-secondary"
-                title="Colonnes attendues : Matricule, Définition, Thème, Date de réalisation"
+                title="Colonnes attendues : Matricule, Définition, Thème, Date de réalisation. Ajoute au tableau 'Objectif à définir' de l'entretien le plus récent du collaborateur."
               >
                 <FileUp className="h-4 w-4" />
                 Importer objectifs à évaluer
