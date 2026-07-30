@@ -484,7 +484,18 @@ class InterviewViewSet(viewsets.ModelViewSet):
 
         reader = csv.DictReader(io.StringIO(file.read().decode("utf-8-sig")))
 
+        def row_already_imported(existing_rows, theme, objectif):
+            theme_key = (theme or "").strip().lower()
+            objectif_key = (objectif or "").strip().lower()
+            for existing_row in existing_rows:
+                existing_theme = (existing_row[0] if len(existing_row) > 0 else "") or ""
+                existing_objectif = (existing_row[1] if len(existing_row) > 1 else "") or ""
+                if existing_theme.strip().lower() == theme_key and existing_objectif.strip().lower() == objectif_key:
+                    return True
+            return False
+
         created = 0
+        skipped = 0
         errors = []
         for row_num, row in enumerate(reader, start=2):
             matricule = get_column(row, "Matricule")
@@ -538,10 +549,15 @@ class InterviewViewSet(viewsets.ModelViewSet):
                     except ValueError:
                         pass
 
-                new_row = [theme, objectif, date_realisation, "", None, "", None, ""]
                 answer = question.get("answer")
                 if not isinstance(answer, list):
                     answer = []
+
+                if row_already_imported(answer, theme, objectif):
+                    skipped += 1
+                    continue
+
+                new_row = [theme, objectif, date_realisation, "", None, "", None, ""]
                 answer.append(new_row)
                 question["answer"] = answer
 
@@ -550,7 +566,7 @@ class InterviewViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 errors.append(f"Ligne {row_num} ({matricule}): {e}")
 
-        return Response({"created": created, "errors": errors})
+        return Response({"created": created, "skipped": skipped, "errors": errors})
 
     @staticmethod
     def _parse_date(value):

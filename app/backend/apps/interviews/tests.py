@@ -641,6 +641,59 @@ class ImportObjectifsAEvaluerTests(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["created"], 0)
 
+    def test_reimporting_same_row_does_not_duplicate(self):
+        """Ré-importer le même fichier ne doit pas dupliquer les lignes
+        déjà présentes (même thème + même définition) : seules les lignes
+        manquantes doivent être ajoutées."""
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        csv_content = (
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        first = self._upload(csv_content)
+        self.assertEqual(first.status_code, 200, first.data)
+        self.assertEqual(first.data["created"], 1)
+
+        second = self._upload(csv_content)
+        self.assertEqual(second.status_code, 200, second.data)
+        self.assertEqual(second.data["created"], 0)
+        self.assertEqual(second.data["skipped"], 1)
+
+        interview.refresh_from_db()
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        matching_rows = [r for r in evaluer["answer"] if r and r[0] == "Qualité"]
+        self.assertEqual(len(matching_rows), 1)
+
+    def test_reimporting_file_only_adds_missing_rows(self):
+        """Un fichier ré-importé avec une ligne déjà présente et une
+        nouvelle ligne ne doit ajouter que la nouvelle."""
+        interview = Interview.objects.create(
+            employee=self.employee, manager=self.manager, type="annual",
+            status="completed", due_date=datetime.date(2026, 12, 31),
+            template=self.template, content={"sections": copy.deepcopy(ANNUAL_TEMPLATE["sections"])},
+        )
+        self._upload(
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+        )
+        response = self._upload(
+            "Matricule,Définition,Thème,Date de réalisation\n"
+            "00000800,Réduire les défauts,Qualité,31/12/2026\n"
+            "00000800,Suivre une formation,Compétences,15/06/2026\n"
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["created"], 1)
+        self.assertEqual(response.data["skipped"], 1)
+
+        interview.refresh_from_db()
+        evaluer = _find_question(interview.content["sections"], "objectif_a_evaluer")
+        themes = [r[0] for r in evaluer["answer"] if r and r[0]]
+        self.assertEqual(sorted(themes), ["Compétences", "Qualité"])
+
 
 class PrintTemplateTests(TestCase):
     """Le titre imprime doit refleter le type reel de l'entretien, un logo
